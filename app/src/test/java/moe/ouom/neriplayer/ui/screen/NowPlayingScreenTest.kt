@@ -784,6 +784,20 @@ class NowPlayingScreenTest {
     }
 
     @Test
+    fun `playback source badge identifies LX custom source`() {
+        val sourceType = resolveNowPlayingPlaybackSourceType(
+            isLocalSong = false,
+            isYouTubeMusicSong = false,
+            isFromNeteaseTag = true,
+            isFromBiliTag = false,
+            currentMediaUrl = "https://example.com/audio.flac",
+            playbackAudioSource = PlaybackAudioSource.LX_MUSIC
+        )
+
+        assertEquals(PlaybackSourceType.LX_MUSIC, sourceType)
+    }
+
+    @Test
     fun `remote local cache does not override original platform badge`() {
         val sourceType = resolveNowPlayingPlaybackSourceType(
             isLocalSong = false,

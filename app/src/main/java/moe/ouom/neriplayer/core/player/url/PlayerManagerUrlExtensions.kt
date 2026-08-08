@@ -74,11 +74,17 @@ internal suspend fun PlayerManager.resolveSongUrl(
     allowGenericPrefetchCache: Boolean = true,
     playbackRequestTokenOverride: Long? = null
 ): SongUrlResult {
+    val enforceLxSource = shouldEnforceLxSourceOnly(
+        lxSourcesOnlyEnabled = lxSourcesOnlyEnabled,
+        isLocalSong = isLocalSong(song),
+        isYouTubeMusicSong = isYouTubeMusicTrack(song),
+        isBiliSong = isBiliTrack(song)
+    )
     NPLogger.d(
         "NERI-PlayerManager",
         "resolveSongUrl: song=${song.name}, source=${song.album}, forceRefresh=$forceRefresh, streamUrl=${song.streamUrl}, currentUrl=${_currentMediaUrl.value}, stack=[${debugStackHint()}]"
     )
-    if (!forceRefresh && isDirectStreamUrl(song.streamUrl)) {
+    if (!forceRefresh && !enforceLxSource && isDirectStreamUrl(song.streamUrl)) {
         prepareBiliPlaybackSkipsForResolvedPlayback(song, playbackRequestTokenOverride)
         return SongUrlResult.Success(song.streamUrl.orEmpty())
     }
@@ -115,7 +121,7 @@ internal suspend fun PlayerManager.resolveSongUrl(
         return SongUrlResult.Failure
     }
 
-    val localResult = checkLocalCache(song, sideEffects)
+    val localResult = if (enforceLxSource) null else checkLocalCache(song, sideEffects)
     if (localResult != null) {
         prepareBiliPlaybackSkipsForResolvedPlayback(song, playbackRequestTokenOverride)
         NPLogger.d(
@@ -132,7 +138,7 @@ internal suspend fun PlayerManager.resolveSongUrl(
         youtubeQualityOverride = youtubeRecoveryStrategy?.preferredQualityOverride,
         youtubePreferM4aOverride = youtubeRecoveryStrategy?.preferM4a
     )
-    val hasCachedData = if (forceRefresh) {
+    val hasCachedData = if (forceRefresh || enforceLxSource) {
         NPLogger.d(
             "NERI-PlayerManager",
             "resolveSongUrl: bypass complete YouTube cache for forced refresh: $cacheKey"
@@ -172,20 +178,25 @@ internal suspend fun PlayerManager.resolveSongUrl(
             cacheKeyOverride = cacheKey
         )
     }
-    if (!forceRefresh && allowGenericPrefetchCache && !isYouTubeTrack) {
+    if (!forceRefresh && !enforceLxSource && allowGenericPrefetchCache && !isYouTubeTrack) {
         consumeGenericUrlPrefetch(cacheKey)?.let { prefetchedResult ->
             prepareBiliPlaybackSkipsForResolvedPlayback(song)
             return prefetchedResult
         }
     }
-    val initialListenTogetherFallback = listenTogetherFallbackResult(song)
+    val initialListenTogetherFallback = if (enforceLxSource) {
+        null
+    } else {
+        listenTogetherFallbackResult(song)
+    }
     val resolverSideEffects = if (initialListenTogetherFallback != null) {
         RefreshResolverSideEffects(RefreshSideEffectGate { false })
     } else {
         sideEffects
     }
-    val result = retrySongUrlResolution { retryAttempt ->
-        val isFinalAttempt = retryAttempt == SONG_URL_RESOLUTION_RETRY_COUNT
+    val resolutionRetryCount = if (enforceLxSource) 0 else SONG_URL_RESOLUTION_RETRY_COUNT
+    val result = retrySongUrlResolution(retryCount = resolutionRetryCount) { retryAttempt ->
+        val isFinalAttempt = retryAttempt == resolutionRetryCount
         if (retryAttempt > 0) {
             NPLogger.w(
                 "NERI-PlayerManager",
@@ -216,7 +227,8 @@ internal suspend fun PlayerManager.resolveSongUrl(
     }
 
     val listenTogetherFallback = if (
-        result is SongUrlResult.Failure || result is SongUrlResult.RequiresLogin
+        !enforceLxSource &&
+        (result is SongUrlResult.Failure || result is SongUrlResult.RequiresLogin)
     ) {
         listenTogetherFallbackResult(song)
     } else {
@@ -1086,6 +1098,33 @@ private suspend fun PlayerManager.getNeteaseSongUrl(
 ): SongUrlResult = withContext(Dispatchers.IO) {
     try {
         val effectiveQuality = effectiveNeteaseQuality()
+        val lxResult = lxMusicSourceManager.resolveNetease(song, effectiveQuality)
+        if (lxResult != null) {
+            NPLogger.d(
+                "NERI-PlayerManager",
+                "LX source selected: song=${song.name}, source=${lxResult.sourceName}, quality=${lxResult.quality}"
+            )
+            return@withContext SongUrlResult.Success(
+                url = lxResult.url,
+                audioInfo = buildLxPlaybackAudioInfo(lxResult),
+                cacheKeyOverride = buildLxPlaybackCacheKey(
+                    sourceId = lxResult.sourceId,
+                    songId = song.id,
+                    quality = lxResult.quality,
+                    bypassExistingCache = lxSourcesOnlyEnabled
+                )
+            )
+        }
+        if (lxSourcesOnlyEnabled) {
+            if (!suppressError) {
+                sideEffects.emitError {
+                    postPlayerEvent(
+                        PlayerEvent.ShowError(getLocalizedString(R.string.player_lx_source_no_play_url))
+                    )
+                }
+            }
+            return@withContext SongUrlResult.Failure
+        }
         val qualityCandidates = buildNeteaseQualityCandidates(effectiveQuality)
         var previewFallback: SongUrlResult.Success? = null
         var lastFailureReason: NeteasePlaybackResponseParser.FailureReason? = null
@@ -1190,6 +1229,24 @@ private suspend fun PlayerManager.getNeteaseSongUrl(
         }
         SongUrlResult.Failure
     }
+}
+
+internal fun shouldEnforceLxSourceOnly(
+    lxSourcesOnlyEnabled: Boolean,
+    isLocalSong: Boolean,
+    isYouTubeMusicSong: Boolean,
+    isBiliSong: Boolean
+): Boolean = lxSourcesOnlyEnabled && !isLocalSong && !isYouTubeMusicSong && !isBiliSong
+
+internal fun buildLxPlaybackCacheKey(
+    sourceId: String,
+    songId: Long,
+    quality: String,
+    bypassExistingCache: Boolean,
+    cacheNonce: Long = System.nanoTime()
+): String {
+    val base = "lx-${sourceId.hashCode()}-$songId-$quality"
+    return if (bypassExistingCache) "$base-test-$cacheNonce" else base
 }
 
 private suspend fun PlayerManager.getBiliAudioUrl(

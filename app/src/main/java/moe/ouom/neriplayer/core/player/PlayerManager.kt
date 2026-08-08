@@ -435,6 +435,8 @@ object PlayerManager {
     internal var neteaseAutoSourceSwitchEnabled = true
     @Volatile
     internal var neteaseLocalSourceFallbackEnabled = true
+    @Volatile
+    internal var lxSourcesOnlyEnabled = false
     internal var stopOnBluetoothDisconnectEnabled = true
     @Volatile
     internal var usbExclusivePlaybackEnabled = false
@@ -661,6 +663,7 @@ object PlayerManager {
     val biliRepo by lazy { AppContainer.biliPlaybackRepository }
     val biliClient by lazy { AppContainer.biliClient }
     val neteaseClient by lazy { AppContainer.neteaseClient }
+    val lxMusicSourceManager by lazy { AppContainer.lxMusicSourceManager }
     val youtubeMusicPlaybackRepository by lazy { AppContainer.youtubeMusicPlaybackRepository }
     val youtubeMusicClient by lazy { AppContainer.youtubeMusicClient }
 
@@ -1669,6 +1672,7 @@ object PlayerManager {
         ioScope.launch {
             when (currentAudioInfo.source) {
                 PlaybackAudioSource.NETEASE -> settingsRepo.setAudioQuality(normalizedKey)
+                PlaybackAudioSource.LX_MUSIC -> settingsRepo.setAudioQuality(normalizedKey)
                 PlaybackAudioSource.BILIBILI -> settingsRepo.setBiliAudioQuality(normalizedKey)
                 PlaybackAudioSource.YOUTUBE_MUSIC -> settingsRepo.setYouTubeAudioQuality(normalizedKey)
                 PlaybackAudioSource.LOCAL -> Unit
@@ -1878,7 +1882,8 @@ object PlayerManager {
         reason: String
     ) {
         val targetJob = when (source) {
-            PlaybackAudioSource.NETEASE -> ::neteaseQualityRefreshJob
+            PlaybackAudioSource.NETEASE,
+            PlaybackAudioSource.LX_MUSIC -> ::neteaseQualityRefreshJob
             PlaybackAudioSource.YOUTUBE_MUSIC -> ::youtubeQualityRefreshJob
             PlaybackAudioSource.BILIBILI -> ::biliQualityRefreshJob
             PlaybackAudioSource.LOCAL -> return
@@ -1899,7 +1904,10 @@ object PlayerManager {
         reason: String
     ) {
         val currentAudioInfo = _currentPlaybackAudioInfo.value ?: return
-        if (currentAudioInfo.source != source) return
+        val matchesSource = currentAudioInfo.source == source ||
+            (source == PlaybackAudioSource.NETEASE &&
+                currentAudioInfo.source == PlaybackAudioSource.LX_MUSIC)
+        if (!matchesSource) return
         val currentSong = _currentSongFlow.value ?: return
         if (isLocalSong(currentSong)) return
 
@@ -2288,6 +2296,7 @@ object PlayerManager {
                     "bili-$biliSongId-${effectiveBiliQuality()}"
                 }
             }
+            lxSourcesOnlyEnabled -> "lx-only-${song.id}-${effectiveNeteaseQuality()}"
             else -> "netease-${song.id}-${effectiveNeteaseQuality()}"
         }
     }

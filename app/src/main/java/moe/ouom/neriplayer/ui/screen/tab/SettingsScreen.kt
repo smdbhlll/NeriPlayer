@@ -187,6 +187,7 @@ import moe.ouom.neriplayer.ui.screen.tab.settings.component.ThemeModeActionButto
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.ThemeSeedListItem
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.UsbExclusiveSettingsSection
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.YouTubePlaybackSourceSetting
+import moe.ouom.neriplayer.ui.screen.tab.settings.component.LxCustomSourcesSetting
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.settingsItemClickable
 import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsGitHubDialogs
 import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsPreferenceDialogs
@@ -1796,6 +1797,11 @@ fun SettingsScreen(
 
                 SettingsPage.PlaybackSource -> {
                     miuixSettingsSectionCardItem(key = "${selectedPage.name}:content") {
+                        LxCustomSourcesSetting(
+                            highlightTargetId = settingsHighlightTargetId,
+                            highlightPulse = settingsHighlightPulse,
+                            onHighlightFinished = onSettingsHighlightFinished
+                        )
                         YouTubePlaybackSourceSetting(
                             repository = AppContainer.settingsRepo,
                             highlightTargetId = settingsHighlightTargetId,

@@ -20,6 +20,7 @@ internal fun requiresPcmAudioProcessing(
 ): Boolean {
     // 网易云直链在部分设备的系统卸载输出会反复重配，保持 PCM 管线避免视觉设置影响播放
     return audioSource == PlaybackAudioSource.NETEASE ||
+        audioSource == PlaybackAudioSource.LX_MUSIC ||
         usbExclusivePlaybackEnabled ||
         abs(playbackSpeed - 1f) > PLAYBACK_PARAMETER_EPSILON ||
         abs(playbackPitch - 1f) > PLAYBACK_PARAMETER_EPSILON ||

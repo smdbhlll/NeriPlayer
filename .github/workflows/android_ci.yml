@@ -232,6 +232,14 @@ jobs:
           name: neri-apk
           path: app/build/outputs/apk/release/**/*.apk
 
+      - name: Upload unsigned PR APK
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: neri-apk-pr
+          path: app/build/outputs/apk/release/**/*.apk
+          if-no-files-found: error
+
   upload-telegram:
     needs:
       - build

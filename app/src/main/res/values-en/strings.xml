@@ -2392,4 +2392,21 @@
 
     <!-- About -->
     <string name="about_app_footer">NeriPlayer • GPLv3 • Powered by You</string>
+    <string name="settings_lx_sources_only">LX sources only</string>
+    <string name="settings_lx_sources_only_desc">Resolve NetEase tracks only through enabled LX custom sources, bypassing native URLs, playback caches, and other fallbacks</string>
+    <string name="settings_lx_source_import">Import LX custom source</string>
+    <string name="settings_lx_source_import_desc">Supports LX Music 2.0 custom-source JavaScript files</string>
+    <string name="settings_lx_source_count">%1$d sources imported and tried in list order</string>
+    <string name="settings_lx_source_imported">Imported “%1$s”</string>
+    <string name="settings_lx_source_import_failed">Import failed: %1$s</string>
+    <string name="settings_lx_source_delete_title">Delete custom source</string>
+    <string name="settings_lx_source_delete_message">Delete “%1$s”?</string>
+    <string name="settings_lx_source_move_up">Move up</string>
+    <string name="settings_lx_source_move_down">Move down</string>
+    <string name="settings_lx_source_status_not_tested">Not loaded</string>
+    <string name="settings_lx_source_status_initializing">Initializing</string>
+    <string name="settings_lx_source_status_ready">Available</string>
+    <string name="settings_lx_source_status_failed">Unavailable: %1$s</string>
+    <string name="player_lx_source_no_play_url">No enabled LX custom source returned a playable URL</string>
+    <string name="nowplaying_lx_music">LX custom source</string>
 </resources>
