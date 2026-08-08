@@ -1729,8 +1729,7 @@ object AutoSettingsSchema {
             type = SettingValueType.Boolean,
             defaultBoolean = false,
             order = 139,
-            ui = SettingUiType.Custom,
-            access = SettingAccessMode.KeyOnly
+            ui = SettingUiType.Custom
         )
         val lxSourcesOnly = autoSetting(
             titleRes = R.string.settings_lx_sources_only,
