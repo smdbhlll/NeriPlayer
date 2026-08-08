@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +60,7 @@ internal fun LxCustomSourcesSetting(
     onHighlightFinished: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val repository = AppContainer.lxCustomSourceRepository
     val manager = AppContainer.lxMusicSourceManager
@@ -79,11 +81,17 @@ internal fun LxCustomSourcesSetting(
                 }
                 repository.importScript(script)
             }.onSuccess { source ->
-                AppFeedback.show(context, context.getString(R.string.settings_lx_source_imported, source.name))
+                AppFeedback.show(
+                    context,
+                    resources.getString(R.string.settings_lx_source_imported, source.name)
+                )
             }.onFailure { error ->
                 AppFeedback.show(
                     context,
-                    context.getString(R.string.settings_lx_source_import_failed, error.message.orEmpty())
+                    resources.getString(
+                        R.string.settings_lx_source_import_failed,
+                        error.message.orEmpty()
+                    )
                 )
             }
         }
