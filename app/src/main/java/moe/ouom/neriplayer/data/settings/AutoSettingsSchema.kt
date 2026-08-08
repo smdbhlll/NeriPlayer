@@ -1731,7 +1731,9 @@ object AutoSettingsSchema {
             order = 139,
             ui = SettingUiType.Custom
         )
-        val lxSourcesOnly = autoSetting(
+        val lxSourcesOnly = autoSwitchSetting(
+            key = "lx_sources_only",
+            defaultValue = false,
             titleRes = R.string.settings_lx_sources_only,
             descriptionRes = R.string.settings_lx_sources_only_desc
         )
