@@ -73,7 +73,7 @@ If you want to self-host Listen Together, jump to
 
 ```text
 NeriPlayer
-├── Multi-source playback: NetEase / Bilibili / YouTube Music
+├── Multi-source playback: NetEase / Bilibili / YouTube Music, with optional LX Music custom sources
 ├── Local-first data: cache, downloads, playlists, history, stats, settings
 ├── User-owned sync: GitHub / WebDAV metadata sync
 ├── Rich playback: Media3, lyrics, effects, fluid background, home widgets, launcher shortcuts, floating/status-bar lyrics
@@ -405,6 +405,15 @@ For release build and signing details, see
   preview clip, the player first tries lower quality and can then match a
   Bilibili fallback candidate by title, artist, and duration. When enabled, it can
   also match a readable local audio file by stable metadata.
+- 🔌 **LX Music custom sources (user supplied)**:
+  under **Settings > Playback Sources**, import `.js` custom sources compatible with
+  **LX Music 2.0**. Multiple sources can be stored, enabled or disabled independently,
+  reordered, and removed. Enabled sources are tried in list order for NetEase tracks,
+  and Now Playing identifies the LX source that supplied the URL. **LX sources only**
+  is off by default; when enabled it bypasses native URLs, playback caches, and other
+  fallbacks for NetEase tracks so custom-source availability can be tested directly.
+  Custom sources are third-party executable scripts: import only sources you trust and
+  are authorized to use.
 - 🧯 **Playback failure fallback**:
   playback errors first try refreshing the active playback URL. Bilibili stream
   resolution retries missing DASH audio and can fall back to html5/mp4 progressive
