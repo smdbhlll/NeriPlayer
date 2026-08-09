@@ -138,6 +138,9 @@ class SettingsRepository(private val context: Context) {
         settingFlow(AutoSettingsSchema.playback.youtubePlaybackSource)
             .map(YouTubePlaybackSourcePreferencePolicy::fromStorage)
 
+    val lxSourcesOnlyFlow: Flow<Boolean> =
+        settingFlow(AutoSettingsSchema.playback.lxSourcesOnly)
+
     val biliAudioQualityFlow: Flow<String> =
         dataStoreSettingFlow { it[SettingsKeys.BILI_AUDIO_QUALITY] ?: "high" }
 
@@ -668,6 +671,10 @@ class SettingsRepository(private val context: Context) {
             setting = AutoSettingsSchema.playback.youtubePlaybackSource,
             value = source.storageValue
         )
+    }
+
+    suspend fun setLxSourcesOnly(enabled: Boolean) {
+        setSetting(AutoSettingsSchema.playback.lxSourcesOnly, enabled)
     }
 
     suspend fun setBiliAudioQuality(value: String) {

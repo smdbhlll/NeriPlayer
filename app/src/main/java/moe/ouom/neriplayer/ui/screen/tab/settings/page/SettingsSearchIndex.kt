@@ -90,7 +90,8 @@ internal fun searchSettingsEntries(
 internal fun AutoSettingInfo.settingsPage(): SettingsPage? {
     if (
         keyName == "netease_auto_source_switch" ||
-        keyName == "netease_local_source_fallback"
+        keyName == "netease_local_source_fallback" ||
+        keyName == "lx_sources_only"
     ) {
         return SettingsPage.PlaybackSource
     }
@@ -759,7 +760,9 @@ private val PageSearchAliases = mapOf(
     SettingsPage.Network to listOf("network", "proxy", "bypass", "daili", "wangluo"),
     SettingsPage.Playback to listOf("playback", "audio", "queue", "volume", "fade", "crossfade", "bofang"),
     SettingsPage.UsbExclusive to listOf("usb", "dac", "pcm", "uac", "exclusive", "bit perfect", "dizhan"),
-    SettingsPage.PlaybackSource to listOf("source", "fallback", "bili", "netease", "yinyuan", "huanyuan"),
+    SettingsPage.PlaybackSource to listOf(
+        "source", "fallback", "bili", "netease", "lx", "custom source", "yinyuan", "huanyuan"
+    ),
     SettingsPage.AudioQuality to listOf("quality", "lossless", "hires", "dolby", "bitrate", "yinzhi"),
     SettingsPage.Storage to listOf(
         "storage",

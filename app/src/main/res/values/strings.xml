@@ -2392,4 +2392,21 @@
 
     <!-- About -->
     <string name="about_app_footer">NeriPlayer • GPLv3 • 由你可爱地驱动</string>
+    <string name="settings_lx_sources_only">仅 LX 源</string>
+    <string name="settings_lx_sources_only_desc">仅使用已启用的 LX 自定义源解析网易云歌曲，并绕过原生直链、播放缓存和其他兜底音源</string>
+    <string name="settings_lx_source_import">导入 LX 自定义源</string>
+    <string name="settings_lx_source_import_desc">支持 LX Music 2.0 自定义源 JavaScript 文件</string>
+    <string name="settings_lx_source_count">已导入 %1$d 个源，按列表顺序依次尝试</string>
+    <string name="settings_lx_source_imported">已导入“%1$s”</string>
+    <string name="settings_lx_source_import_failed">导入失败：%1$s</string>
+    <string name="settings_lx_source_delete_title">删除自定义源</string>
+    <string name="settings_lx_source_delete_message">确定删除“%1$s”吗？</string>
+    <string name="settings_lx_source_move_up">上移</string>
+    <string name="settings_lx_source_move_down">下移</string>
+    <string name="settings_lx_source_status_not_tested">尚未加载</string>
+    <string name="settings_lx_source_status_initializing">正在初始化</string>
+    <string name="settings_lx_source_status_ready">可用</string>
+    <string name="settings_lx_source_status_failed">不可用：%1$s</string>
+    <string name="player_lx_source_no_play_url">所有已启用的 LX 自定义源均未返回可用地址</string>
+    <string name="nowplaying_lx_music">LX 自定义源</string>
 </resources>

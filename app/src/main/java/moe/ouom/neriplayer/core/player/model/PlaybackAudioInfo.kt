@@ -5,6 +5,7 @@ import java.util.Locale
 enum class PlaybackAudioSource {
     LOCAL,
     NETEASE,
+    LX_MUSIC,
     BILIBILI,
     YOUTUBE_MUSIC
 }
@@ -137,6 +138,7 @@ data class PreferredQualityKeys(
 fun PreferredQualityKeys.forSource(source: PlaybackAudioSource): String? {
     return when (source) {
         PlaybackAudioSource.NETEASE -> netease
+        PlaybackAudioSource.LX_MUSIC -> netease
         PlaybackAudioSource.YOUTUBE_MUSIC -> youtube
         PlaybackAudioSource.BILIBILI -> bili
         PlaybackAudioSource.LOCAL -> null

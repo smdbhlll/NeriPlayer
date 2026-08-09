@@ -9,6 +9,7 @@ import moe.ouom.neriplayer.core.player.model.SongUrlResult
 import moe.ouom.neriplayer.core.player.model.deriveCodecLabel
 import moe.ouom.neriplayer.core.player.model.estimateBitrateKbps
 import moe.ouom.neriplayer.core.player.model.inferYouTubeQualityKeyFromBitrate
+import moe.ouom.neriplayer.core.api.lx.LxResolvedAudio
 import moe.ouom.neriplayer.data.platform.bili.BiliAudioStreamInfo
 import moe.ouom.neriplayer.core.player.resolver.netease.NeteasePlaybackResponseParser
 import kotlin.math.abs
@@ -197,6 +198,25 @@ internal fun buildNeteaseOfflineCacheAudioInfo(
         qualityKey = qualityKey,
         qualityLabel = qualityLabelForNetease(qualityKey, getLocalizedString),
         qualityOptions = buildNeteaseQualityOptions(getLocalizedString)
+    )
+}
+
+internal fun buildLxPlaybackAudioInfo(resolved: LxResolvedAudio): PlaybackAudioInfo {
+    val qualityLabel = when (resolved.quality) {
+        "128k" -> "128 kbps"
+        "320k" -> "320 kbps"
+        "flac" -> "FLAC"
+        "flac24bit" -> "Hi-Res FLAC"
+        else -> resolved.quality
+    }
+    return PlaybackAudioInfo(
+        source = PlaybackAudioSource.LX_MUSIC,
+        qualityKey = resolved.quality,
+        qualityLabel = "${resolved.sourceName} | $qualityLabel",
+        codecLabel = when (resolved.quality) {
+            "flac", "flac24bit" -> "FLAC"
+            else -> null
+        }
     )
 }
 

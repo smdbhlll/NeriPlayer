@@ -1216,7 +1216,7 @@ object AudioDownloadManager {
                                     avoidDirect = avoidYouTubeDirectSource
                                 )
                                 isBili -> resolveBili(song)
-                                else -> resolveNetease(song.id)
+                                else -> resolveNetease(song)
                             }
                             if (resolved == null) {
                                 if (attemptNumber < TRANSIENT_DOWNLOAD_MAX_ATTEMPTS) {
@@ -2870,8 +2870,27 @@ object AudioDownloadManager {
     }
 
     // 解析网易云直链
-    private suspend fun resolveNetease(songId: Long): ResolvedDownloadSource? {
+    private suspend fun resolveNetease(song: SongItem): ResolvedDownloadSource? {
         val quality = try { AppContainer.settingsRepo.audioQualityFlow.first() } catch (_: Exception) { "exhigh" }
+        val lxResolved = AppContainer.lxMusicSourceManager.resolveNetease(song, quality)
+        if (lxResolved != null) {
+            return ResolvedDownloadSource(
+                url = lxResolved.url,
+                mimeType = when (lxResolved.quality) {
+                    "flac", "flac24bit" -> "audio/flac"
+                    else -> null
+                },
+                fileExtensionHint = when (lxResolved.quality) {
+                    "flac", "flac24bit" -> "flac"
+                    else -> extFromUrl(lxResolved.url)
+                }
+            )
+        }
+        val onlyLxSources = runCatching {
+            AppContainer.settingsRepo.lxSourcesOnlyFlow.first()
+        }.getOrDefault(false)
+        if (onlyLxSources) return null
+        val songId = song.id
         val raw = AppContainer.neteaseClient.getSongDownloadUrl(songId, level = quality)
         return try {
             val root = JSONObject(raw)

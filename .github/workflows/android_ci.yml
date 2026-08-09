@@ -211,9 +211,29 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Build unsigned Release for PR
+      - name: Generate PR test keystore
         if: github.event_name == 'pull_request'
-        run: ./gradlew :app:assembleRelease -PallowUnsignedRelease=true --warning-mode all --stacktrace
+        run: |
+          keytool -genkeypair -noprompt \
+            -keystore app/pr-test.jks \
+            -storepass android \
+            -alias key0 \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 3650 \
+            -dname "CN=NeriPlayer PR Build, OU=CI, O=NeriPlayer, L=Unknown, ST=Unknown, C=US"
+
+      - name: Build installable Release for PR
+        if: github.event_name == 'pull_request'
+        run: |
+          ./gradlew :app:assembleRelease \
+            -PKEYSTORE_FILE=pr-test.jks \
+            -PKEYSTORE_PASSWORD=android \
+            -PKEY_ALIAS=key0 \
+            -PKEY_PASSWORD=android \
+            --warning-mode all \
+            --stacktrace
 
       - name: Build signed Release for master
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -231,6 +251,14 @@ jobs:
         with:
           name: neri-apk
           path: app/build/outputs/apk/release/**/*.apk
+
+      - name: Upload installable PR APK
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: neri-apk-pr-installable
+          path: app/build/outputs/apk/release/**/*.apk
+          if-no-files-found: error
 
   upload-telegram:
     needs:

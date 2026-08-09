@@ -940,6 +940,11 @@ internal fun PlayerManager.initializeImpl(
             }
         }
         ioScope.launch {
+            settingsRepo.lxSourcesOnlyFlow.collect { enabled ->
+                lxSourcesOnlyEnabled = enabled
+            }
+        }
+        ioScope.launch {
             settingsRepo.stopOnBluetoothDisconnectFlow.collect { enabled ->
                 stopOnBluetoothDisconnectEnabled = enabled
             }

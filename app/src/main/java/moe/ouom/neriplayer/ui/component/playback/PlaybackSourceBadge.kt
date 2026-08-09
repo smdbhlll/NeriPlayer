@@ -45,6 +45,7 @@ import moe.ouom.neriplayer.R
 
 enum class PlaybackSourceType {
     NETEASE,
+    LX_MUSIC,
     BILIBILI,
     YOUTUBE_MUSIC,
     LOCAL
@@ -75,6 +76,20 @@ fun PlaybackSourceBadge(
                 )
                 Text(
                     text = stringResource(R.string.nowplaying_netease_cloud),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            PlaybackSourceType.LX_MUSIC -> {
+                Icon(
+                    imageVector = Icons.Outlined.LibraryMusic,
+                    contentDescription = stringResource(R.string.nowplaying_lx_music),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = stringResource(R.string.nowplaying_lx_music),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )

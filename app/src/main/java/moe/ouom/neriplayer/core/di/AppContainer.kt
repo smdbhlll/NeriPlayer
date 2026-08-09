@@ -40,6 +40,7 @@ import moe.ouom.neriplayer.core.api.lyrics.AmllTtmlClient
 import moe.ouom.neriplayer.core.api.lyrics.EditableLyricsMatcher
 import moe.ouom.neriplayer.core.api.lyrics.KugouLyricsClient
 import moe.ouom.neriplayer.core.api.lyrics.LrcLibClient
+import moe.ouom.neriplayer.core.api.lx.LxMusicSourceManager
 import moe.ouom.neriplayer.core.api.netease.NeteaseClient
 import moe.ouom.neriplayer.core.api.search.CloudMusicSearchApi
 import moe.ouom.neriplayer.core.api.search.QQMusicSearchApi
@@ -50,6 +51,7 @@ import moe.ouom.neriplayer.core.download.ManagedDownloadStorage
 import moe.ouom.neriplayer.core.player.download.AudioDownloadManager
 import moe.ouom.neriplayer.data.listentogether.ListenTogetherPreferences
 import moe.ouom.neriplayer.data.local.playlist.LocalPlaylistRepository
+import moe.ouom.neriplayer.data.lx.LxCustomSourceRepository
 import moe.ouom.neriplayer.data.auth.bili.BiliCookieRepository
 import moe.ouom.neriplayer.data.auth.netease.NeteaseCookieRepository
 import moe.ouom.neriplayer.data.auth.web.ForegroundWebLoginGuard
@@ -274,6 +276,10 @@ object AppContainer {
         YouTubeMusicPlaylistCacheRepository(application)
     }
 
+    val lxCustomSourceRepository by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        LxCustomSourceRepository(application)
+    }
+
 
     // 共享 OkHttpClient: 受 DynamicProxySelector 管理
     val sharedOkHttpClient by lazy {
@@ -337,6 +343,14 @@ object AppContainer {
                 response
             }
         configureSharedOkHttpClient(clientBuilder).build()
+    }
+
+    val lxMusicSourceManager by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        LxMusicSourceManager(
+            context = application,
+            repository = lxCustomSourceRepository,
+            client = sharedOkHttpClient
+        )
     }
 
     // 网络客户端

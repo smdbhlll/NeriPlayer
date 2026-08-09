@@ -1725,6 +1725,20 @@ object AutoSettingsSchema {
         )
 
         @AutoSetting(
+            key = "lx_sources_only",
+            type = SettingValueType.Boolean,
+            defaultBoolean = false,
+            order = 139,
+            ui = SettingUiType.Custom
+        )
+        val lxSourcesOnly = autoSwitchSetting(
+            key = "lx_sources_only",
+            defaultValue = false,
+            titleRes = R.string.settings_lx_sources_only,
+            descriptionRes = R.string.settings_lx_sources_only_desc
+        )
+
+        @AutoSetting(
             key = "youtube_playback_source",
             type = SettingValueType.String,
             defaultString = DEFAULT_YOUTUBE_PLAYBACK_SOURCE,
