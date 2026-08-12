@@ -2542,4 +2542,16 @@
 
     <!-- About -->
     <string name="about_app_footer">NeriPlayer • GPLv3 • Powered by You</string>
+    <string name="settings_multi_account_count">%1$d accounts. Tap to assign purposes</string>
+    <string name="settings_multi_account_purpose_hint">Each purpose can use a different account. Deleting an assigned account falls back to the primary account.</string>
+    <string name="settings_multi_account_id">Account ID: %1$s</string>
+    <string name="settings_multi_account_primary">Primary account</string>
+    <string name="settings_multi_account_history">Play history</string>
+    <string name="settings_multi_account_streaming">Audio/video streaming</string>
+    <string name="settings_multi_account_add">Add account</string>
+    <string name="settings_multi_account_delete">Delete account</string>
+    <string name="settings_multi_account_delete_confirm">Delete “%1$s”? The saved credentials for this account will be removed.</string>
+    <string name="settings_multi_account_rename">Rename account</string>
+    <string name="settings_netease_accounts_title">NetEase accounts</string>
+    <string name="settings_bili_accounts_title">Bilibili accounts</string>
 </resources>

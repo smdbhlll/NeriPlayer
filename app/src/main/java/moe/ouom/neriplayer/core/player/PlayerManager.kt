@@ -657,12 +657,13 @@ object PlayerManager {
     internal var playbackProgressAdvanceReported = false
     internal var lastHandledTrackEndKey: String? = null
     internal var lastTrackEndHandledAtMs = 0L
+    internal var platformPlaybackSessionId = 0L
     val audioLevelFlow get() = AudioReactive.level
     val beatImpulseFlow get() = AudioReactive.beat
 
     val biliRepo by lazy { AppContainer.biliPlaybackRepository }
-    val biliClient by lazy { AppContainer.biliClient }
-    val neteaseClient by lazy { AppContainer.neteaseClient }
+    val biliClient by lazy { AppContainer.biliStreamingClient }
+    val neteaseClient by lazy { AppContainer.neteaseStreamingClient }
     val youtubeMusicPlaybackRepository by lazy { AppContainer.youtubeMusicPlaybackRepository }
     val youtubeMusicClient by lazy { AppContainer.youtubeMusicClient }
 
@@ -700,6 +701,15 @@ object PlayerManager {
     internal fun setCurrentSongForPlayback(song: SongItem?, syncLyricon: Boolean = true) {
         val previousSong = _currentSongFlow.value
         if (previousSong != null && !previousSong.sameIdentityAs(song)) {
+            val previousPlaybackSessionId = platformPlaybackSessionId
+            val previousPlayedMs = _playbackPositionMs.value
+            ioScope.launch {
+                AppContainer.platformPlaybackHistoryReporter.report(
+                    song = previousSong,
+                    playbackSessionId = previousPlaybackSessionId,
+                    playedMs = previousPlayedMs
+                )
+            }
             persistLongFormPlaybackProgress(
                 song = previousSong,
                 positionMs = _playbackPositionMs.value,
@@ -708,6 +718,12 @@ object PlayerManager {
             lastLongFormPlaybackProgressPersistAtMs = 0L
         }
         _currentSongFlow.value = song
+        if (
+            previousSong?.sameIdentityAs(song) != true &&
+            (previousSong != null || song != null)
+        ) {
+            platformPlaybackSessionId += 1L
+        }
         _playbackDurationMs.value = song?.durationMs?.coerceAtLeast(0L) ?: 0L
         if (previousSong === song) return
         if (syncLyricon) {
@@ -2452,6 +2468,21 @@ object PlayerManager {
 
     internal fun handleTrackEndedIfNeeded(source: String) =
         this.handleTrackEndedIfNeededImpl(source)
+
+    internal fun reportCurrentPlatformPlaybackCompleted() {
+        val song = _currentSongFlow.value ?: return
+        val completedSessionId = platformPlaybackSessionId
+        val completedPlayedMs = maxOf(_playbackPositionMs.value, _playbackDurationMs.value)
+        platformPlaybackSessionId += 1L
+        ioScope.launch {
+            AppContainer.platformPlaybackHistoryReporter.report(
+                song = song,
+                playbackSessionId = completedSessionId,
+                playedMs = completedPlayedMs,
+                completed = true
+            )
+        }
+    }
 
     internal fun flushPlaybackStatsBlocking(
         reason: String,

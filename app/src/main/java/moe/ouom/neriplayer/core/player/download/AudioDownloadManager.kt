@@ -2773,7 +2773,7 @@ object AudioDownloadManager {
     // 解析网易云直链
     private suspend fun resolveNetease(songId: Long): ResolvedDownloadSource? {
         val quality = try { AppContainer.settingsRepo.audioQualityFlow.first() } catch (_: Exception) { "exhigh" }
-        val raw = AppContainer.neteaseClient.getSongDownloadUrl(songId, level = quality)
+        val raw = AppContainer.neteaseStreamingClient.getSongDownloadUrl(songId, level = quality)
         return try {
             val root = JSONObject(raw)
             if (root.optInt("code") != 200) return tryWeapiFallback(songId, quality)
@@ -2802,7 +2802,7 @@ object AudioDownloadManager {
     private fun tryWeapiFallback(songId: Long, level: String): ResolvedDownloadSource? {
         return try {
             val br = bitrateForQuality(level)
-            val raw = AppContainer.neteaseClient.getSongUrl(songId, bitrate = br)
+            val raw = AppContainer.neteaseStreamingClient.getSongUrl(songId, bitrate = br)
             val data = NeteasePlaybackResponseParser.parseDownloadInfo(raw) ?: return null
             val url = data.url
             val finalUrl = ensureHttps(url)
@@ -2931,7 +2931,7 @@ object AudioDownloadManager {
 
     // Resolve Bili audio direct url.
     private suspend fun resolveBili(song: SongItem): ResolvedDownloadSource? {
-        val resolved = resolveBiliSong(song, AppContainer.biliClient) ?: return null
+        val resolved = resolveBiliSong(song, AppContainer.biliStreamingClient) ?: return null
         val chosen: BiliAudioStreamInfo? = AppContainer.biliPlaybackRepository
             .getBestPlayableAudio(resolved.videoInfo.bvid, resolved.cid)
         val url = chosen?.url ?: return null

@@ -23,8 +23,8 @@ internal class SafeModeResetActions(
 
     suspend fun clearAllCookiesAndLoginOptions() {
         withContext(Dispatchers.IO) {
-            NeteaseCookieRepository(appContext).clear()
-            BiliCookieRepository(appContext).clear()
+            NeteaseCookieRepository(appContext).clearAllAccounts()
+            BiliCookieRepository(appContext).clearAllAccounts()
             YouTubeAuthRepository(appContext).clear()
         }
         clearAllWebViewLoginState(appContext)

@@ -2542,4 +2542,16 @@
 
     <!-- About -->
     <string name="about_app_footer">NeriPlayer • GPLv3 • 由你可爱地驱动</string>
+    <string name="settings_multi_account_count">%1$d 个账号，点击管理用途</string>
+    <string name="settings_multi_account_purpose_hint">每个用途可以独立选择账号。删除正在使用的账号后会自动回退到主账号。</string>
+    <string name="settings_multi_account_id">账号标识：%1$s</string>
+    <string name="settings_multi_account_primary">主账号</string>
+    <string name="settings_multi_account_history">播放记录</string>
+    <string name="settings_multi_account_streaming">音频/视频取流</string>
+    <string name="settings_multi_account_add">添加账号</string>
+    <string name="settings_multi_account_delete">删除账号</string>
+    <string name="settings_multi_account_delete_confirm">确定删除“%1$s”吗？该账号保存的登录凭据将被移除。</string>
+    <string name="settings_multi_account_rename">重命名账号</string>
+    <string name="settings_netease_accounts_title">网易云多账号</string>
+    <string name="settings_bili_accounts_title">哔哩哔哩多账号</string>
 </resources>

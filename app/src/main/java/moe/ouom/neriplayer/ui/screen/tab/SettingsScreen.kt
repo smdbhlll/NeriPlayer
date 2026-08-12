@@ -170,7 +170,9 @@ import moe.ouom.neriplayer.ui.effect.glass.LocalAdvancedGlassController
 import moe.ouom.neriplayer.ui.effect.glass.isolatedAdvancedGlassHorizontalTransition
 import moe.ouom.neriplayer.ui.screen.tab.settings.about.SettingsAboutContent
 import moe.ouom.neriplayer.ui.screen.tab.settings.auth.LoginSuccessDialog
+import moe.ouom.neriplayer.ui.screen.tab.settings.auth.AccountManagementItem
 import moe.ouom.neriplayer.ui.screen.tab.settings.auth.SettingsBiliAuthDialogs
+import moe.ouom.neriplayer.ui.screen.tab.settings.auth.SettingsMultiAccountDialog
 import moe.ouom.neriplayer.ui.screen.tab.settings.auth.SettingsNeteaseAuthDialogs
 import moe.ouom.neriplayer.ui.screen.tab.settings.auth.SettingsYouTubeAuthDialogs
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.LazyAnimatedVisibility
@@ -664,6 +666,8 @@ fun SettingsScreen(
     var showNeteaseSavedCookieDialog by remember { mutableStateOf(false) }
     var showBiliSheet by remember { mutableStateOf(false) }
     var showBiliSavedCookieDialog by remember { mutableStateOf(false) }
+    var showBiliAccountsDialog by remember { mutableStateOf(false) }
+    var showNeteaseAccountsDialog by remember { mutableStateOf(false) }
     var showYouTubeSheet by remember { mutableStateOf(false) }
     var showYouTubeSavedCookieDialog by remember { mutableStateOf(false) }
 
@@ -1502,22 +1506,16 @@ fun SettingsScreen(
                             biliVm = biliVm,
                             youtubeVm = youtubeVm,
                             neteaseVm = neteaseVm,
+                            onOpenBiliAccounts = { showBiliAccountsDialog = true },
+                            onOpenNeteaseAccounts = { showNeteaseAccountsDialog = true },
                             onOpenBiliSheet = { tab ->
                                 inlineMsg = null
                                 biliSheetInitialTab = tab
                                 showBiliSheet = true
                             },
-                            onOpenBiliSavedCookieDialog = {
-                                inlineMsg = null
-                                showBiliSavedCookieDialog = true
-                            },
                             onOpenYouTubeSavedCookieDialog = {
                                 inlineMsg = null
                                 showYouTubeSavedCookieDialog = true
-                            },
-                            onOpenNeteaseSavedCookieDialog = {
-                                inlineMsg = null
-                                showNeteaseSavedCookieDialog = true
                             },
                             onOpenYouTubeSheet = {
                                 inlineMsg = null
@@ -2205,7 +2203,10 @@ fun SettingsScreen(
     SettingsNeteaseAuthDialogs(
         showSheet = showNeteaseSheet,
         initialTab = neteaseSheetInitialTab,
-        onDismissSheet = { showNeteaseSheet = false },
+        onDismissSheet = {
+            showNeteaseSheet = false
+            AppContainer.neteaseCookieRepo.cancelAddAccount()
+        },
         inlineMsg = inlineMsg,
         onInlineMsgChange = { inlineMsg = it },
         showConfirmDialog = showConfirmDialog,
@@ -2226,10 +2227,39 @@ fun SettingsScreen(
         onBrowserLogin = null
     )
 
+    val neteaseAccounts by AppContainer.neteaseCookieRepo.accountsFlow.collectAsState()
+    if (showNeteaseAccountsDialog) {
+        SettingsMultiAccountDialog(
+            title = stringResource(R.string.settings_netease_accounts_title),
+            accounts = neteaseAccounts.accounts.map {
+                AccountManagementItem(
+                    id = it.id,
+                    name = it.name
+                )
+            },
+            primaryAccountId = neteaseAccounts.primaryAccountId,
+            playHistoryAccountId = neteaseAccounts.playHistoryAccountId,
+            streamingAccountId = neteaseAccounts.streamingAccountId,
+            onSelect = AppContainer.neteaseCookieRepo::selectAccount,
+            onRename = AppContainer.neteaseCookieRepo::renameAccount,
+            onDelete = AppContainer.neteaseCookieRepo::deleteAccount,
+            onAdd = {
+                AppContainer.neteaseCookieRepo.beginAddAccount()
+                showNeteaseAccountsDialog = false
+                neteaseSheetInitialTab = 0
+                showNeteaseSheet = true
+            },
+            onDismiss = { showNeteaseAccountsDialog = false }
+        )
+    }
+
     SettingsBiliAuthDialogs(
         showSheet = showBiliSheet,
         initialTab = biliSheetInitialTab,
-        onDismissSheet = { showBiliSheet = false },
+        onDismissSheet = {
+            showBiliSheet = false
+            AppContainer.biliCookieRepo.cancelAddAccount()
+        },
         inlineMsg = inlineMsg,
         onInlineMsgChange = { inlineMsg = it },
         vm = biliVm,
@@ -2246,6 +2276,33 @@ fun SettingsScreen(
         },
         onBrowserLogin = null
     )
+
+    val biliAccounts by AppContainer.biliCookieRepo.accountsFlow.collectAsState()
+    if (showBiliAccountsDialog) {
+        SettingsMultiAccountDialog(
+            title = stringResource(R.string.settings_bili_accounts_title),
+            accounts = biliAccounts.accounts.map {
+                AccountManagementItem(
+                    id = it.id,
+                    name = it.name,
+                    platformUserId = it.cookies["DedeUserID"]?.takeIf(String::isNotBlank)
+                )
+            },
+            primaryAccountId = biliAccounts.primaryAccountId,
+            playHistoryAccountId = biliAccounts.playHistoryAccountId,
+            streamingAccountId = biliAccounts.streamingAccountId,
+            onSelect = AppContainer.biliCookieRepo::selectAccount,
+            onRename = AppContainer.biliCookieRepo::renameAccount,
+            onDelete = AppContainer.biliCookieRepo::deleteAccount,
+            onAdd = {
+                AppContainer.biliCookieRepo.beginAddAccount()
+                showBiliAccountsDialog = false
+                biliSheetInitialTab = 0
+                showBiliSheet = true
+            },
+            onDismiss = { showBiliAccountsDialog = false }
+        )
+    }
 
     SettingsYouTubeAuthDialogs(
         showSheet = showYouTubeSheet,
@@ -3951,16 +4008,18 @@ private fun SettingsLoginExpandedContent(
     biliVm: BiliAuthViewModel,
     youtubeVm: YouTubeAuthViewModel,
     neteaseVm: NeteaseAuthViewModel,
+    onOpenBiliAccounts: () -> Unit,
+    onOpenNeteaseAccounts: () -> Unit,
     onOpenBiliSheet: (Int) -> Unit,
-    onOpenBiliSavedCookieDialog: () -> Unit,
     onOpenYouTubeSavedCookieDialog: () -> Unit,
-    onOpenNeteaseSavedCookieDialog: () -> Unit,
     onOpenYouTubeSheet: () -> Unit,
     onOpenNeteaseSheet: () -> Unit,
 ) {
     val biliAuthUiState by biliVm.uiState.collectAsStateWithLifecycleCompat()
     val youtubeAuthUiState by youtubeVm.uiState.collectAsStateWithLifecycleCompat()
     val neteaseAuthUiState by neteaseVm.uiState.collectAsStateWithLifecycleCompat()
+    val biliAccounts by AppContainer.biliCookieRepo.accountsFlow.collectAsState()
+    val neteaseAccounts by AppContainer.neteaseCookieRepo.accountsFlow.collectAsState()
 
     LaunchedEffect(biliVm, youtubeVm, neteaseVm) {
         biliVm.refreshAuthHealth()
@@ -4047,11 +4106,17 @@ private fun SettingsLoginExpandedContent(
                 )
             },
             headlineContent = { Text(stringResource(R.string.platform_bilibili)) },
-            supportingContent = { Text(biliStatusText) },
+            supportingContent = {
+                Text(
+                    if (biliAccounts.accounts.isNotEmpty()) {
+                        stringResource(R.string.settings_multi_account_count, biliAccounts.accounts.size)
+                    } else biliStatusText
+                )
+            },
             modifier = Modifier.settingsItemClickable(
                 onClick = {
-                    if (biliAuthUiState.hasSavedCookies) {
-                        onOpenBiliSavedCookieDialog()
+                    if (biliAccounts.accounts.isNotEmpty()) {
+                        onOpenBiliAccounts()
                     } else {
                         onOpenBiliSheet(0)
                     }
@@ -4093,11 +4158,17 @@ private fun SettingsLoginExpandedContent(
                 )
             },
             headlineContent = { Text(stringResource(R.string.platform_netease)) },
-            supportingContent = { Text(neteaseStatusText) },
+            supportingContent = {
+                Text(
+                    if (neteaseAccounts.accounts.isNotEmpty()) {
+                        stringResource(R.string.settings_multi_account_count, neteaseAccounts.accounts.size)
+                    } else neteaseStatusText
+                )
+            },
             modifier = Modifier.settingsItemClickable(
                 onClick = {
-                    if (neteaseAuthUiState.hasSavedCookies) {
-                        onOpenNeteaseSavedCookieDialog()
+                    if (neteaseAccounts.accounts.isNotEmpty()) {
+                        onOpenNeteaseAccounts()
                     } else {
                         onOpenNeteaseSheet()
                     }

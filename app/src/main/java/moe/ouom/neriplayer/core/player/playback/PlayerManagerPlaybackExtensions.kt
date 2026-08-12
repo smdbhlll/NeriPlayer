@@ -1274,6 +1274,7 @@ internal fun PlayerManager.handleTrackEndedIfNeededImpl(source: String) {
     }
     lastHandledTrackEndKey = currentKey
     lastTrackEndHandledAtMs = now
+    reportCurrentPlatformPlaybackCompleted()
     NPLogger.d(
         "NERI-PlayerManager",
         "开始处理曲目结束事件: source=$source, key=$currentKey, index=$currentIndex, queueSize=${currentPlaylist.size}"

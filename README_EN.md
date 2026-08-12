@@ -103,13 +103,10 @@ Current positioning:
   to private) or a WebDAV remote file.
 - **Privacy and account safety first**: sync is intentionally decentralized.
   Data is written to GitHub/WebDAV storage that you control, not to a centralized
-  service operated by the project maintainer. The app is technically capable of
-  sending playback history back to third-party music platforms, but centralized
-  music clients often have risk-control and behavior-sampling systems. Uploading
-  local playback history directly may be interpreted as abnormal login or playback
-  behavior and could put an account at risk. To protect account safety,
-  NeriPlayer does not upload local playback history or playback stats back to
-  those platforms.
+  service operated by the project maintainer. Users can independently choose the
+  NetEase and Bilibili account used for play-history reporting. Only playback
+  information required by that platform is reported after eligible playback;
+  local NeriPlayer statistics and records from other platforms are not uploaded.
 - **Single Activity + Compose**: `MainActivity` is the only external entry point.
   The UI is organized by Compose `NavHost`, a dynamic bottom bar, Mini Player,
   and the Now Playing overlay.
@@ -1127,9 +1124,9 @@ We will keep improving the project over time.
   history, and playback stats are synced.
 - Audio caches, downloaded files, cookies, and playback tokens are not uploaded
   to the developers.
-- For account safety, the app does not write local playback history or playback
-  stats back to third-party music platforms, because that kind of reporting may
-  be misclassified by platform risk-control systems.
+- Users can choose independent NetEase and Bilibili accounts for platform
+  play-history reporting. These reports do not include NeriPlayer local playback
+  statistics or records from other platforms.
 - Full config export files contain settings, auth data, and sync configuration.
   They are intended for personal migration and should not be shared publicly.
 - Android system cloud backup / device transfer is disabled by default.

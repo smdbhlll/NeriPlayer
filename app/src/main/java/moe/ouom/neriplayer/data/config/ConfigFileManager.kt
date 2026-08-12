@@ -219,7 +219,7 @@ class ConfigFileManager(private val context: Context) {
                     restoredCount++
                 }
             } else {
-                AppContainer.neteaseCookieRepo.clear()
+                AppContainer.neteaseCookieRepo.clearAllAccounts()
             }
         }
 
@@ -231,7 +231,7 @@ class ConfigFileManager(private val context: Context) {
                 )
                 restoredCount++
             } else {
-                AppContainer.biliCookieRepo.clear()
+                AppContainer.biliCookieRepo.clearAllAccounts()
             }
         }
 
