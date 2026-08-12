@@ -211,9 +211,29 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Build unsigned Release for PR
+      - name: Generate temporary Release keystore for PR
         if: github.event_name == 'pull_request'
-        run: ./gradlew :app:assembleRelease -PallowUnsignedRelease=true --warning-mode all --stacktrace
+        run: |
+          keytool -genkeypair -v \
+            -keystore app/neri-pr-release.jks \
+            -storepass neriplayer \
+            -alias key0 \
+            -keypass neriplayer \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=NeriPlayer PR Build, OU=CI, O=NeriPlayer, L=Unknown, ST=Unknown, C=US"
+
+      - name: Build signed Release for PR
+        if: github.event_name == 'pull_request'
+        run: |
+          ./gradlew :app:assembleRelease \
+            -PbuildAllReleaseAbis=true \
+            -PKEYSTORE_FILE=neri-pr-release.jks \
+            -PKEYSTORE_PASSWORD=neriplayer \
+            -PKEY_ALIAS=key0 \
+            -PKEY_PASSWORD=neriplayer \
+            --warning-mode all --stacktrace
 
       - name: Build installable Debug APK for PR
         if: github.event_name == 'pull_request'
@@ -242,6 +262,14 @@ jobs:
         with:
           name: neri-apk-debug
           path: app/build/outputs/apk/debug/**/*.apk
+          if-no-files-found: error
+
+      - name: Upload installable Release APKs
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: neri-apk-release
+          path: app/build/outputs/apk/release/**/*.apk
           if-no-files-found: error
 
   upload-telegram:
