@@ -58,6 +58,7 @@ import moe.ouom.neriplayer.data.auth.youtube.YouTubeAuthRepository
 import moe.ouom.neriplayer.data.auth.youtube.YouTubeAuthRotationWorker
 import moe.ouom.neriplayer.data.auth.youtube.YOUTUBE_MUSIC_ORIGIN
 import moe.ouom.neriplayer.data.history.PlayHistoryRepository
+import moe.ouom.neriplayer.data.history.PlatformPlaybackHistoryReporter
 import moe.ouom.neriplayer.data.platform.bili.BiliArchiveCacheRepository
 import moe.ouom.neriplayer.data.platform.bili.BiliFavoriteFolderCacheRepository
 import moe.ouom.neriplayer.data.platform.bili.BiliVideoSkipRepository
@@ -66,6 +67,7 @@ import moe.ouom.neriplayer.data.platform.youtube.YouTubeMusicPlaylistCacheReposi
 import moe.ouom.neriplayer.data.playlist.usage.LocalPlaylistPlaybackStatsRepository
 import moe.ouom.neriplayer.data.playlist.usage.PlaylistUsageRepository
 import moe.ouom.neriplayer.data.stats.PlaybackStatsRepository
+import moe.ouom.neriplayer.data.sync.CoverUrlMapper
 import moe.ouom.neriplayer.data.traffic.TrafficStatsRepository
 import moe.ouom.neriplayer.listentogether.network.http.ListenTogetherApi
 import moe.ouom.neriplayer.listentogether.ListenTogetherSessionManager
@@ -348,7 +350,38 @@ object AppContainer {
         }
     }
 
+    val neteaseStreamingClient by lazy {
+        NeteaseClient().also { client ->
+            val cookies = neteaseCookieRepo.getStreamingCookiesOnce().toMutableMap()
+            cookies.putIfAbsent("os", "pc")
+            client.setPersistedCookies(cookies)
+        }
+    }
+
+    private val neteaseHistoryClient by lazy {
+        NeteaseClient().also { client ->
+            val cookies = neteaseCookieRepo.getPlayHistoryCookiesOnce().toMutableMap()
+            cookies.putIfAbsent("os", "pc")
+            client.setPersistedCookies(cookies)
+        }
+    }
+
     val biliClient by lazy { BiliClient(biliCookieRepo, client = sharedOkHttpClient) }
+    val biliStreamingClient by lazy {
+        BiliClient(
+            cookieRepo = biliCookieRepo,
+            client = sharedOkHttpClient,
+            cookieProvider = biliCookieRepo::getStreamingCookiesOnce
+        )
+    }
+    val platformPlaybackHistoryReporter by lazy {
+        PlatformPlaybackHistoryReporter(
+            neteaseHistoryClient = neteaseHistoryClient,
+            neteaseCookieRepository = neteaseCookieRepo,
+            biliCookieRepository = biliCookieRepo,
+            httpClient = sharedOkHttpClient
+        )
+    }
     internal val biliSponsorBlockRepository by lazy { BiliSponsorBlockRepository(sharedOkHttpClient) }
     internal val biliVideoSkipRepository by lazy { BiliVideoSkipRepository.getInstance(application) }
     private val youtubeMusicClientDelegate = lazy {
@@ -363,7 +396,7 @@ object AppContainer {
 
     // 功能 Repo 和 API
     val biliPlaybackRepository by lazy {
-        val dataSource = BiliClientAudioDataSource(biliClient)
+        val dataSource = BiliClientAudioDataSource(biliStreamingClient)
         BiliPlaybackRepository(dataSource, settingsRepo)
     }
     private val youtubeMusicPlaybackRepositoryDelegate = lazy {
@@ -445,6 +478,8 @@ object AppContainer {
         initialized = true
         AudioDownloadManager.initialize(app)
         warmLocalPlaylistRepository()
+        warmBiliVideoSkipRepository()
+        warmCoverUrlMapper()
         primeProxySetting()
         startCookieObserver()
         startYouTubeAuthObserver()
@@ -461,6 +496,26 @@ object AppContainer {
                 }
             }.onFailure { error ->
                 NPLogger.e("AppContainer", "Failed to preload local playlists", error)
+            }
+        }
+    }
+
+    private fun warmBiliVideoSkipRepository() {
+        scope.launch {
+            runCatching {
+                BiliVideoSkipRepository.getInstance(application)
+            }.onFailure { error ->
+                NPLogger.e("AppContainer", "Failed to preload Bili video skip rules", error)
+            }
+        }
+    }
+
+    private fun warmCoverUrlMapper() {
+        scope.launch {
+            runCatching {
+                CoverUrlMapper.getInstance(application)
+            }.onFailure { error ->
+                NPLogger.e("AppContainer", "Failed to preload cover URL mappings", error)
             }
         }
     }
@@ -483,6 +538,22 @@ object AppContainer {
                 mutableCookies.putIfAbsent("os", "pc")
 
                 neteaseClient.setPersistedCookies(mutableCookies)
+            }
+            .launchIn(scope)
+
+        neteaseCookieRepo.streamingCookieFlow
+            .onEach { cookies ->
+                val mutableCookies = cookies.toMutableMap()
+                mutableCookies.putIfAbsent("os", "pc")
+                neteaseStreamingClient.setPersistedCookies(mutableCookies)
+            }
+            .launchIn(scope)
+
+        neteaseCookieRepo.playHistoryCookieFlow
+            .onEach { cookies ->
+                val mutableCookies = cookies.toMutableMap()
+                mutableCookies.putIfAbsent("os", "pc")
+                neteaseHistoryClient.setPersistedCookies(mutableCookies)
             }
             .launchIn(scope)
     }

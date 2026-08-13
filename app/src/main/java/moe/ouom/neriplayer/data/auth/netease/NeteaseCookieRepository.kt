@@ -2,29 +2,6 @@
 
 package moe.ouom.neriplayer.data.auth.netease
 
-/*
- * NeriPlayer - A unified Android player for streaming music and videos from multiple online platforms.
- * Copyright (C) 2025-2025 NeriPlayer developers
- * https://github.com/cwuom/NeriPlayer
- *
- * This software is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * This software is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this software.
- * If not, see <https://www.gnu.org/licenses/>.
- *
- * File: moe.ouom.neriplayer.data.auth.netease/NeteaseCookieRepository
- * Created: 2025/8/9
- */
-
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
@@ -33,14 +10,17 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import moe.ouom.neriplayer.core.logging.NPLogger
+import moe.ouom.neriplayer.data.auth.common.PlatformAccountPurpose
 import moe.ouom.neriplayer.data.auth.common.SavedCookieAuthHealth
 import moe.ouom.neriplayer.data.auth.common.SavedCookieAuthState
-import moe.ouom.neriplayer.core.logging.NPLogger
+import org.json.JSONArray
 import org.json.JSONObject
 
 private const val NETEASE_AUTH_PREFS = "netease_auth_secure_prefs"
@@ -54,10 +34,7 @@ object CookieKeys {
     val NETEASE_COOKIE_JSON = stringPreferencesKey("netease_cookie_json")
 }
 
-private val NETEASE_LOGIN_COOKIE_KEYS = listOf(
-    "MUSIC_U"
-)
-
+private val NETEASE_LOGIN_COOKIE_KEYS = listOf("MUSIC_U")
 private val NETEASE_COOKIE_NAME_REGEX = Regex("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 data class NeteaseCookieValidationResult(
@@ -66,7 +43,6 @@ data class NeteaseCookieValidationResult(
 ) {
     val hasLoginCookie: Boolean
         get() = NETEASE_LOGIN_COOKIE_KEYS.any { key -> !sanitizedCookies[key].isNullOrBlank() }
-
     val isAccepted: Boolean
         get() = sanitizedCookies.isNotEmpty() && hasLoginCookie
 }
@@ -77,7 +53,6 @@ internal fun validateAndSanitizeNeteaseCookies(
 ): NeteaseCookieValidationResult {
     val sanitized = linkedMapOf<String, String>()
     val rejected = linkedSetOf<String>()
-
     cookies.forEach { (rawKey, rawValue) ->
         val key = rawKey.trim()
         val value = rawValue.trim()
@@ -91,63 +66,70 @@ internal fun validateAndSanitizeNeteaseCookies(
             else -> sanitized[key] = value
         }
     }
-
     if (includeFallbackCookies && sanitized.isNotEmpty()) {
         sanitized.putIfAbsent("os", NETEASE_COOKIE_FALLBACK_OS)
         sanitized.putIfAbsent("appver", NETEASE_COOKIE_FALLBACK_APPVER)
     }
-
-    return NeteaseCookieValidationResult(
-        sanitizedCookies = sanitized,
-        rejectedKeys = rejected.toList()
-    )
+    return NeteaseCookieValidationResult(sanitized, rejected.toList())
 }
 
 data class NeteaseAuthBundle(
     val cookies: Map<String, String> = emptyMap(),
     val savedAt: Long = 0L
 ) {
-    fun hasLoginCookies(): Boolean {
-        return NETEASE_LOGIN_COOKIE_KEYS.any { key -> !cookies[key].isNullOrBlank() }
-    }
-
-    fun normalized(savedAt: Long = this.savedAt): NeteaseAuthBundle {
-        return copy(
-            cookies = LinkedHashMap(cookies.filterKeys { it.isNotBlank() }),
-            savedAt = savedAt
-        )
-    }
-
-    fun toJson(): String {
-        return JSONObject().apply {
-            put(
-                "cookies",
-                JSONObject().apply {
-                    cookies.forEach { (key, value) -> put(key, value) }
-                }
-            )
-            put("savedAt", savedAt)
-        }.toString()
-    }
+    fun hasLoginCookies(): Boolean = NETEASE_LOGIN_COOKIE_KEYS.any { !cookies[it].isNullOrBlank() }
+    fun normalized(savedAt: Long = this.savedAt): NeteaseAuthBundle = copy(
+        cookies = LinkedHashMap(cookies.filterKeys { it.isNotBlank() }),
+        savedAt = savedAt
+    )
+    fun toJson(): String = JSONObject().apply {
+        put("cookies", cookies.toJsonObject())
+        put("savedAt", savedAt)
+    }.toString()
 
     companion object {
-        fun fromJson(json: String): NeteaseAuthBundle {
-            return runCatching {
-                val root = JSONObject(json)
-                val cookiesJson = root.optJSONObject("cookies") ?: JSONObject()
-                val cookies = linkedMapOf<String, String>()
-                val keys = cookiesJson.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    cookies[key] = cookiesJson.optString(key, "")
-                }
-                val savedAt = root.optLong("savedAt", 0L)
-                NeteaseAuthBundle(
-                    cookies = cookies,
-                    savedAt = savedAt
-                ).normalized(savedAt = savedAt)
-            }.getOrDefault(NeteaseAuthBundle())
-        }
+        fun fromJson(json: String): NeteaseAuthBundle = runCatching {
+            val root = JSONObject(json)
+            NeteaseAuthBundle(root.optJSONObject("cookies").toStringMap(), root.optLong("savedAt", 0L))
+                .normalized(root.optLong("savedAt", 0L))
+        }.getOrDefault(NeteaseAuthBundle())
+    }
+}
+
+data class NeteaseAccount(
+    val id: String,
+    val name: String,
+    val cookies: Map<String, String>,
+    val savedAt: Long
+) {
+    fun toAuthBundle() = NeteaseAuthBundle(cookies, savedAt)
+}
+
+data class NeteaseAccountsState(
+    val accounts: List<NeteaseAccount> = emptyList(),
+    val primaryAccountId: String? = null,
+    val playHistoryAccountId: String? = null,
+    val streamingAccountId: String? = null
+) {
+    fun selectedId(purpose: PlatformAccountPurpose): String? = when (purpose) {
+        PlatformAccountPurpose.PRIMARY -> primaryAccountId
+        PlatformAccountPurpose.PLAY_HISTORY -> playHistoryAccountId ?: primaryAccountId
+        PlatformAccountPurpose.STREAMING -> streamingAccountId ?: primaryAccountId
+    }
+
+    fun account(purpose: PlatformAccountPurpose): NeteaseAccount? {
+        val id = selectedId(purpose)
+        return accounts.firstOrNull { it.id == id } ?: accounts.firstOrNull()
+    }
+
+    fun normalized(): NeteaseAccountsState {
+        val ids = accounts.mapTo(linkedSetOf()) { it.id }
+        val primary = primaryAccountId?.takeIf(ids::contains) ?: accounts.firstOrNull()?.id
+        return copy(
+            primaryAccountId = primary,
+            playHistoryAccountId = playHistoryAccountId?.takeIf(ids::contains) ?: primary,
+            streamingAccountId = streamingAccountId?.takeIf(ids::contains) ?: primary
+        )
     }
 }
 
@@ -155,27 +137,15 @@ internal fun evaluateNeteaseAuthHealth(
     bundle: NeteaseAuthBundle,
     now: Long = System.currentTimeMillis()
 ): SavedCookieAuthHealth {
-    val normalized = bundle.normalized(savedAt = bundle.savedAt)
-    val loginCookieKeys = NETEASE_LOGIN_COOKIE_KEYS.filter { key ->
-        !normalized.cookies[key].isNullOrBlank()
-    }
+    val normalized = bundle.normalized(bundle.savedAt)
+    val loginCookieKeys = NETEASE_LOGIN_COOKIE_KEYS.filter { !normalized.cookies[it].isNullOrBlank() }
     if (loginCookieKeys.isEmpty()) {
-        return SavedCookieAuthHealth(
-            state = SavedCookieAuthState.Missing,
-            savedAt = normalized.savedAt,
-            checkedAt = now
-        )
+        return SavedCookieAuthHealth(SavedCookieAuthState.Missing, normalized.savedAt, now)
     }
-
-    val savedAt = normalized.savedAt
-    val ageMs = if (savedAt > 0L) {
-        (now - savedAt).coerceAtLeast(0L)
-    } else {
-        Long.MAX_VALUE
-    }
+    val ageMs = if (normalized.savedAt > 0L) (now - normalized.savedAt).coerceAtLeast(0L) else Long.MAX_VALUE
     return SavedCookieAuthHealth(
         state = SavedCookieAuthState.Valid,
-        savedAt = savedAt,
+        savedAt = normalized.savedAt,
         checkedAt = now,
         ageMs = ageMs,
         loginCookieKeys = loginCookieKeys
@@ -183,182 +153,160 @@ internal fun evaluateNeteaseAuthHealth(
 }
 
 class NeteaseCookieRepository(private val context: Context) {
-    private var encryptedPrefs: SharedPreferences
-    private val _authFlow: MutableStateFlow<NeteaseAuthBundle>
-    private val _cookieFlow: MutableStateFlow<Map<String, String>>
-    private val _authHealthFlow: MutableStateFlow<SavedCookieAuthHealth>
+    private var encryptedPrefs: SharedPreferences = openEncryptedPrefsWithRecovery()
+    private val _accountsFlow = MutableStateFlow(loadAccountsState())
+    private val _cookieFlow = MutableStateFlow(cookiesFor(PlatformAccountPurpose.PRIMARY))
+    private val _playHistoryCookieFlow = MutableStateFlow(cookiesFor(PlatformAccountPurpose.PLAY_HISTORY))
+    private val _streamingCookieFlow = MutableStateFlow(cookiesFor(PlatformAccountPurpose.STREAMING))
+    private val _authHealthFlow = MutableStateFlow(evaluateNeteaseAuthHealth(primaryBundle()))
+    private var addAccountOnNextSave = false
 
-    val cookieFlow: StateFlow<Map<String, String>>
-        get() = _cookieFlow.asStateFlow()
-
-    val authHealthFlow: StateFlow<SavedCookieAuthHealth>
-        get() = _authHealthFlow.asStateFlow()
-
-    init {
-        encryptedPrefs = openEncryptedPrefsWithRecovery()
-        val initialBundle = loadAuthBundle()
-        _authFlow = MutableStateFlow(initialBundle)
-        _cookieFlow = MutableStateFlow(initialBundle.cookies)
-        _authHealthFlow = MutableStateFlow(
-            evaluateNeteaseAuthHealth(initialBundle)
-        )
-    }
+    val accountsFlow: StateFlow<NeteaseAccountsState> = _accountsFlow.asStateFlow()
+    val cookieFlow: StateFlow<Map<String, String>> = _cookieFlow.asStateFlow()
+    val playHistoryCookieFlow: StateFlow<Map<String, String>> = _playHistoryCookieFlow.asStateFlow()
+    val streamingCookieFlow: StateFlow<Map<String, String>> = _streamingCookieFlow.asStateFlow()
+    val authHealthFlow: StateFlow<SavedCookieAuthHealth> = _authHealthFlow.asStateFlow()
 
     fun getCookiesOnce(): Map<String, String> = _cookieFlow.value
-
+    fun getPlayHistoryCookiesOnce(): Map<String, String> = _playHistoryCookieFlow.value
+    fun getStreamingCookiesOnce(): Map<String, String> = _streamingCookieFlow.value
     fun getAuthHealthOnce(): SavedCookieAuthHealth = _authHealthFlow.value
+    fun getAuthHealth(now: Long = System.currentTimeMillis()) = evaluateNeteaseAuthHealth(primaryBundle(), now)
+    fun validateCookies(cookies: Map<String, String>) = validateAndSanitizeNeteaseCookies(cookies)
 
-    fun getAuthHealth(
-        now: Long = System.currentTimeMillis()
-    ): SavedCookieAuthHealth = evaluateNeteaseAuthHealth(_authFlow.value, now)
-
-    fun validateCookies(cookies: Map<String, String>): NeteaseCookieValidationResult {
-        return validateAndSanitizeNeteaseCookies(cookies)
+    @Synchronized
+    fun beginAddAccount() {
+        addAccountOnNextSave = true
     }
 
-    fun saveCookies(
-        cookies: Map<String, String>,
-        savedAt: Long = System.currentTimeMillis()
-    ): Boolean {
+    @Synchronized
+    fun cancelAddAccount() {
+        addAccountOnNextSave = false
+    }
+
+    @Synchronized
+    fun saveCookies(cookies: Map<String, String>, savedAt: Long = System.currentTimeMillis()): Boolean {
         val validation = validateCookies(cookies)
         if (!validation.isAccepted) {
-            NPLogger.w(
-                "NERI-CookieRepo",
-                "Rejected invalid NetEase cookies. rejectedKeys=${validation.rejectedKeys.joinToString()}"
-            )
+            NPLogger.w("NERI-CookieRepo", "Rejected invalid NetEase cookies: ${validation.rejectedKeys}")
             return false
         }
-        val normalized = NeteaseAuthBundle(
+        val current = _accountsFlow.value
+        val updatedAccounts = current.accounts.toMutableList()
+        val primaryId = current.primaryAccountId
+        val targetIndex = if (addAccountOnNextSave) -1 else updatedAccounts.indexOfFirst { it.id == primaryId }
+        val account = NeteaseAccount(
+            id = if (targetIndex >= 0) updatedAccounts[targetIndex].id else UUID.randomUUID().toString(),
+            name = if (targetIndex >= 0) updatedAccounts[targetIndex].name else defaultAccountName(updatedAccounts.size + 1),
             cookies = validation.sanitizedCookies,
             savedAt = savedAt
-        ).normalized(savedAt = savedAt)
-        encryptedPrefs.edit {
-            putString(KEY_NETEASE_AUTH_BUNDLE, normalized.toJson())
-        }
-        _authFlow.value = normalized
-        _cookieFlow.value = normalized.cookies
-        _authHealthFlow.value = evaluateNeteaseAuthHealth(normalized)
-        NPLogger.d(
-            "NERI-CookieRepo",
-            "Saved cookies to secure storage: keys=${normalized.cookies.keys.joinToString()}"
         )
+        if (targetIndex >= 0) updatedAccounts[targetIndex] = account else updatedAccounts += account
+        val updated = current.copy(
+            accounts = updatedAccounts,
+            primaryAccountId = if (current.primaryAccountId == null) account.id else current.primaryAccountId
+        ).normalized()
+        addAccountOnNextSave = false
+        persistAndPublish(updated)
         return true
     }
 
-    fun clear() {
-        encryptedPrefs.edit {
-            remove(KEY_NETEASE_AUTH_BUNDLE)
+    @Synchronized
+    fun renameAccount(accountId: String, name: String) {
+        val cleanName = name.trim().take(40)
+        if (cleanName.isBlank()) return
+        persistAndPublish(_accountsFlow.value.copy(
+            accounts = _accountsFlow.value.accounts.map { if (it.id == accountId) it.copy(name = cleanName) else it }
+        ).normalized())
+    }
+
+    @Synchronized
+    fun selectAccount(purpose: PlatformAccountPurpose, accountId: String) {
+        if (_accountsFlow.value.accounts.none { it.id == accountId }) return
+        val current = _accountsFlow.value
+        val updated = when (purpose) {
+            PlatformAccountPurpose.PRIMARY -> current.copy(primaryAccountId = accountId)
+            PlatformAccountPurpose.PLAY_HISTORY -> current.copy(playHistoryAccountId = accountId)
+            PlatformAccountPurpose.STREAMING -> current.copy(streamingAccountId = accountId)
         }
-        val cleared = NeteaseAuthBundle()
-        _authFlow.value = cleared
-        _cookieFlow.value = cleared.cookies
-        _authHealthFlow.value = evaluateNeteaseAuthHealth(cleared)
-        NPLogger.d("NERI-CookieRepo", "Cleared all saved cookies.")
+        persistAndPublish(updated.normalized())
+    }
+
+    @Synchronized
+    fun deleteAccount(accountId: String) {
+        persistAndPublish(_accountsFlow.value.copy(
+            accounts = _accountsFlow.value.accounts.filterNot { it.id == accountId }
+        ).normalized())
+    }
+
+    fun clear() {
+        val primaryId = _accountsFlow.value.primaryAccountId ?: return
+        deleteAccount(primaryId)
+    }
+
+    fun clearAllAccounts() {
+        persistAndPublish(NeteaseAccountsState())
     }
 
     fun refreshHealth(now: Long = System.currentTimeMillis()) {
-        _authHealthFlow.value = evaluateNeteaseAuthHealth(
-            bundle = _authFlow.value,
-            now = now
-        )
+        _authHealthFlow.value = evaluateNeteaseAuthHealth(primaryBundle(), now)
     }
 
-    private fun loadAuthBundle(): NeteaseAuthBundle {
-        val raw = runCatching {
-            encryptedPrefs.getString(KEY_NETEASE_AUTH_BUNDLE, null).orEmpty()
-        }.getOrElse { error ->
-            NPLogger.w(
-                "NERI-CookieRepo",
-                "Failed to read NetEase secure prefs, clearing corrupted storage and retrying.",
-                error
-            )
-            rebuildEncryptedStorage()
-            ""
-        }
+    private fun primaryBundle() = _accountsFlow.value.account(PlatformAccountPurpose.PRIMARY)?.toAuthBundle()
+        ?: NeteaseAuthBundle()
+
+    private fun cookiesFor(purpose: PlatformAccountPurpose) =
+        _accountsFlow.value.account(purpose)?.cookies.orEmpty()
+
+    private fun persistAndPublish(state: NeteaseAccountsState) {
+        val normalized = state.normalized()
+        encryptedPrefs.edit { putString(KEY_NETEASE_AUTH_BUNDLE, normalized.toJson()) }
+        _accountsFlow.value = normalized
+        _cookieFlow.value = normalized.account(PlatformAccountPurpose.PRIMARY)?.cookies.orEmpty()
+        _playHistoryCookieFlow.value = normalized.account(PlatformAccountPurpose.PLAY_HISTORY)?.cookies.orEmpty()
+        _streamingCookieFlow.value = normalized.account(PlatformAccountPurpose.STREAMING)?.cookies.orEmpty()
+        _authHealthFlow.value = evaluateNeteaseAuthHealth(primaryBundle())
+    }
+
+    private fun loadAccountsState(): NeteaseAccountsState {
+        val raw = encryptedPrefs.getString(KEY_NETEASE_AUTH_BUNDLE, null).orEmpty()
         if (raw.isNotBlank()) {
-            return NeteaseAuthBundle.fromJson(raw)
+            val root = runCatching { JSONObject(raw) }.getOrNull()
+            if (root?.has("accounts") == true) return root.toNeteaseAccountsState()
+            val legacy = NeteaseAuthBundle.fromJson(raw)
+            if (legacy.hasLoginCookies()) return singleAccountState(legacy)
         }
-
-        return migrateLegacyCookies() ?: NeteaseAuthBundle()
+        return migrateLegacyCookies()?.let(::singleAccountState) ?: NeteaseAccountsState()
     }
 
-    private fun loadLegacyCookies(): Map<String, String> {
-        return runCatching {
-            val prefs = runBlocking { context.cookieDataStore.data.first() }
-            val json = prefs[CookieKeys.NETEASE_COOKIE_JSON] ?: "{}"
-            jsonToMap(json)
-        }.getOrDefault(emptyMap())
+    private fun singleAccountState(bundle: NeteaseAuthBundle): NeteaseAccountsState {
+        val id = UUID.randomUUID().toString()
+        return NeteaseAccountsState(
+            accounts = listOf(NeteaseAccount(id, defaultAccountName(1), bundle.cookies, bundle.savedAt)),
+            primaryAccountId = id,
+            playHistoryAccountId = id,
+            streamingAccountId = id
+        ).also { encryptedPrefs.edit { putString(KEY_NETEASE_AUTH_BUNDLE, it.toJson()) } }
     }
 
     private fun migrateLegacyCookies(): NeteaseAuthBundle? {
-        val legacyCookies = validateAndSanitizeNeteaseCookies(loadLegacyCookies()).sanitizedCookies
-        if (legacyCookies.isEmpty()) {
-            return null
-        }
-
-        val migrated = NeteaseAuthBundle(
-            cookies = legacyCookies,
-            savedAt = 0L
-        ).normalized(savedAt = 0L)
-        encryptedPrefs.edit {
-            putString(KEY_NETEASE_AUTH_BUNDLE, migrated.toJson())
-        }
-        runCatching {
-            runBlocking {
-                context.cookieDataStore.edit { prefs ->
-                    prefs.remove(CookieKeys.NETEASE_COOKIE_JSON)
-                }
-            }
-        }
-        return migrated
+        val prefs = runCatching { runBlocking { context.cookieDataStore.data.first() } }.getOrNull() ?: return null
+        val cookies = validateAndSanitizeNeteaseCookies(prefs[CookieKeys.NETEASE_COOKIE_JSON].orEmpty().toCookieMap()).sanitizedCookies
+        if (cookies.isEmpty()) return null
+        runCatching { runBlocking { context.cookieDataStore.edit { it.remove(CookieKeys.NETEASE_COOKIE_JSON) } } }
+        return NeteaseAuthBundle(cookies, 0L)
     }
 
-    private fun jsonToMap(json: String): Map<String, String> {
-        val obj = JSONObject(json)
-        val result = linkedMapOf<String, String>()
-        val keys = obj.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            result[key] = obj.optString(key, "")
-        }
-        return result
-    }
+    private fun defaultAccountName(index: Int) = "网易云账号 $index"
 
-    private fun openEncryptedPrefsWithRecovery(): SharedPreferences {
-        return runCatching {
-            createEncryptedPrefs()
-        }.getOrElse { error ->
-            NPLogger.w(
-                "NERI-CookieRepo",
-                "Failed to open NetEase secure prefs, clearing storage and recreating.",
-                error
-            )
-            clearEncryptedStorage()
-            createEncryptedPrefs()
-        }
-    }
-
-    private fun rebuildEncryptedStorage() {
-        clearEncryptedStorage()
-        encryptedPrefs = openEncryptedPrefsWithRecovery()
-    }
-
-    private fun clearEncryptedStorage() {
-        runCatching {
-            context.deleteSharedPreferences(NETEASE_AUTH_PREFS)
-        }.onFailure { error ->
-            NPLogger.w(
-                "NERI-CookieRepo",
-                "Failed to delete corrupted NetEase secure prefs file.",
-                error
-            )
-        }
+    private fun openEncryptedPrefsWithRecovery(): SharedPreferences = runCatching { createEncryptedPrefs() }.getOrElse {
+        NPLogger.w("NERI-CookieRepo", "Failed to open NetEase secure prefs, recreating", it)
+        context.deleteSharedPreferences(NETEASE_AUTH_PREFS)
+        createEncryptedPrefs()
     }
 
     private fun createEncryptedPrefs(): SharedPreferences {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
         return EncryptedSharedPreferences.create(
             context,
             NETEASE_AUTH_PREFS,
@@ -368,3 +316,55 @@ class NeteaseCookieRepository(private val context: Context) {
         )
     }
 }
+
+private fun NeteaseAccountsState.toJson(): String = JSONObject().apply {
+    put("version", 2)
+    put("accounts", JSONArray().apply {
+        accounts.forEach { account ->
+            put(JSONObject().apply {
+                put("id", account.id)
+                put("name", account.name)
+                put("cookies", account.cookies.toJsonObject())
+                put("savedAt", account.savedAt)
+            })
+        }
+    })
+    put("primaryAccountId", primaryAccountId)
+    put("playHistoryAccountId", playHistoryAccountId)
+    put("streamingAccountId", streamingAccountId)
+}.toString()
+
+private fun JSONObject.toNeteaseAccountsState(): NeteaseAccountsState = runCatching {
+    val array = optJSONArray("accounts") ?: JSONArray()
+    val accounts = buildList {
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val cookies = item.optJSONObject("cookies").toStringMap()
+            if (validateAndSanitizeNeteaseCookies(cookies).isAccepted) {
+                add(NeteaseAccount(
+                    id = item.optString("id").ifBlank { UUID.randomUUID().toString() },
+                    name = item.optString("name").ifBlank { "网易云账号 ${index + 1}" },
+                    cookies = validateAndSanitizeNeteaseCookies(cookies).sanitizedCookies,
+                    savedAt = item.optLong("savedAt", 0L)
+                ))
+            }
+        }
+    }
+    NeteaseAccountsState(
+        accounts = accounts,
+        primaryAccountId = optString("primaryAccountId").takeIf { it.isNotBlank() },
+        playHistoryAccountId = optString("playHistoryAccountId").takeIf { it.isNotBlank() },
+        streamingAccountId = optString("streamingAccountId").takeIf { it.isNotBlank() }
+    ).normalized()
+}.getOrDefault(NeteaseAccountsState())
+
+private fun Map<String, String>.toJsonObject() = JSONObject().apply { forEach { (key, value) -> put(key, value) } }
+private fun JSONObject?.toStringMap(): Map<String, String> = linkedMapOf<String, String>().apply {
+    val source = this@toStringMap ?: return@apply
+    val keys = source.keys()
+    while (keys.hasNext()) {
+        val key = keys.next()
+        put(key, source.optString(key, ""))
+    }
+}
+private fun String.toCookieMap(): Map<String, String> = runCatching { JSONObject(this).toStringMap() }.getOrDefault(emptyMap())

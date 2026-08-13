@@ -56,7 +56,8 @@ import moe.ouom.neriplayer.core.logging.NPLogger
  */
 class BiliClient(
     private val cookieRepo: BiliCookieRepository = AppContainer.biliCookieRepo,
-    client: OkHttpClient? = null
+    client: OkHttpClient? = null,
+    private val cookieProvider: () -> Map<String, String> = cookieRepo::getCookiesOnce
 ) {
 
     companion object {
@@ -1467,13 +1468,13 @@ class BiliClient(
     }
 
     private suspend fun getEffectiveCookies(): Map<String, String> {
-        val stored = cookieRepo.getCookiesOnce()
+        val stored = cookieProvider()
         if (stored.isNotEmpty()) return stored
         return ensureAnonCookies()
     }
 
     suspend fun validateLoginSession(): Boolean? = withContext(Dispatchers.IO) {
-        val stored = cookieRepo.getCookiesOnce()
+        val stored = cookieProvider()
         if (stored["SESSDATA"].isNullOrBlank()) {
             return@withContext false
         }

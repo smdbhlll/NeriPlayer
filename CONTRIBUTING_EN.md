@@ -131,8 +131,9 @@ for the new behavior.
    ```bash
    adb install -r app/build/outputs/apk/debug/app-debug.apk
    ```
-4. First launch enters the disclaimer and startup onboarding flow. Android 13+
-   devices request notification permission.
+4. First launch enters the disclaimer and startup onboarding flow. Notification and
+   local-music permissions are explained first and requested only after the user
+   chooses them; either can be skipped.
 5. For debugging access, tap the **version number** 7 times in Settings. A
    standalone `Debug` tab will appear in the bottom navigation bar.
 
@@ -264,7 +265,8 @@ Security reminders:
   - NetEase artist summaries, JSON parsing, and detail-screen state management.
 
 - `app/src/main/java/moe/ouom/neriplayer/ui/onboarding/`
-  - First-run onboarding for language, platform accounts, GitHub sync, and personalization.
+  - First-run onboarding for language, platform accounts, permission guidance,
+    playback controls, GitHub sync, and personalization.
 
 - `app/src/main/java/moe/ouom/neriplayer/core/api/`
   - `netease/`: NetEase endpoints, crypto, and account capabilities.
@@ -381,8 +383,9 @@ Security reminders:
 
 - `Explore` is NetEase curated playlists + YouTube Music playlists +
   platform-specific NetEase/Bilibili/YouTube Music search. It is not mixed search.
-- `Home` mainly shows local continue-listening and NetEase recommendations in the
-  default Chinese mode. International mode prioritizes YouTube Music home shelves.
+- `Home` shows local continue-listening, all available NetEase recommendation
+  sources, and Radar playlists in the default Chinese mode. Refreshing updates
+  each section. International mode prioritizes YouTube Music home shelves.
 - The QQ Music entry in `Library` is still a placeholder and does not represent
   full platform integration.
 - Local artist categories are aggregated from imported/saved local songs by
@@ -414,7 +417,8 @@ Security reminders:
   and background lyric timing.
 - NetEase playback tries lower qualities when the current quality is unavailable.
   For restricted, missing-URL, or preview-only tracks, it can auto-match a
-  Bilibili or local-audio fallback source when enabled.
+  Bilibili or local-audio fallback source only when the user enables it; both
+  fallback settings are disabled by default.
 - NetEase playlist detail cache is only for playlist detail fast display and
   failure fallback. Album details still refresh live and should not reuse playlist cache.
 - Local "My Favorite Music" can sync recognizable NetEase songs to NetEase

@@ -407,7 +407,11 @@ class SettingsRepository(private val context: Context) {
         }
 
     val maxCacheSizeBytesFlow: Flow<Long> =
-        dataStoreSettingFlow { it[SettingsKeys.MAX_CACHE_SIZE_BYTES] ?: (1024L * 1024 * 1024) }
+        dataStoreSettingFlow {
+            CacheSizePolicy.normalizeCacheSizeBytes(
+                it[SettingsKeys.MAX_CACHE_SIZE_BYTES] ?: (1024L * 1024 * 1024)
+            )
+        }
 
     val showLyricTranslationFlow: Flow<Boolean> =
         autoSettingsRepository.showLyricTranslationFlow
@@ -417,6 +421,12 @@ class SettingsRepository(private val context: Context) {
 
     val defaultStartDestinationFlow: Flow<String> =
         autoSettingsRepository.defaultStartDestinationFlow
+
+    val libraryDefaultTabFlow: Flow<String> =
+        autoSettingsRepository.libraryDefaultTabFlow
+
+    val libraryTabOrderFlow: Flow<String> =
+        autoSettingsRepository.libraryTabOrderFlow
 
     val autoShowKeyboardFlow: Flow<Boolean> =
         autoSettingsRepository.autoShowKeyboardFlow
@@ -437,10 +447,10 @@ class SettingsRepository(private val context: Context) {
         autoSettingsRepository.homeCardRecommendedFlow
 
     val playbackFadeInFlow: Flow<Boolean> =
-        dataStoreSettingFlow { it[SettingsKeys.PLAYBACK_FADE_IN] ?: false }
+        dataStoreSettingFlow { it[SettingsKeys.PLAYBACK_FADE_IN] ?: true }
 
     val playbackCrossfadeNextFlow: Flow<Boolean> =
-        dataStoreSettingFlow { it[SettingsKeys.PLAYBACK_CROSSFADE_NEXT] ?: false }
+        dataStoreSettingFlow { it[SettingsKeys.PLAYBACK_CROSSFADE_NEXT] ?: true }
 
     val sleepTimerFinishCurrentOnExpiryFlow: Flow<Boolean> =
         dataStoreSettingFlow {
@@ -518,10 +528,10 @@ class SettingsRepository(private val context: Context) {
         dataStoreSettingFlow { it[SettingsKeys.KEEP_PLAYBACK_MODE_STATE] ?: true }
 
     val neteaseAutoSourceSwitchFlow: Flow<Boolean> =
-        dataStoreSettingFlow { it[SettingsKeys.NETEASE_AUTO_SOURCE_SWITCH] ?: true }
+        dataStoreSettingFlow { it[SettingsKeys.NETEASE_AUTO_SOURCE_SWITCH] ?: false }
 
     val neteaseLocalSourceFallbackFlow: Flow<Boolean> =
-        dataStoreSettingFlow { it[SettingsKeys.NETEASE_LOCAL_SOURCE_FALLBACK] ?: true }
+        dataStoreSettingFlow { it[SettingsKeys.NETEASE_LOCAL_SOURCE_FALLBACK] ?: false }
 
     val stopOnBluetoothDisconnectFlow: Flow<Boolean> =
         dataStoreSettingFlow { it[SettingsKeys.STOP_ON_BLUETOOTH_DISCONNECT] ?: true }
@@ -1003,7 +1013,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setMaxCacheSizeBytes(bytes: Long) {
-        val normalized = bytes.coerceAtLeast(0L)
+        val normalized = CacheSizePolicy.normalizeCacheSizeBytes(bytes)
         context.dataStore.edit { it[SettingsKeys.MAX_CACHE_SIZE_BYTES] = normalized }
         updatePlaybackPreferenceSnapshot(context) { it.copy(maxCacheSizeBytes = normalized) }
     }
@@ -1059,6 +1069,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setDefaultStartDestination(route: String) {
         autoSettingsRepository.setDefaultStartDestination(route)
+    }
+
+    suspend fun setLibraryDefaultTab(tab: String) {
+        autoSettingsRepository.setLibraryDefaultTab(tab)
+    }
+
+    suspend fun setLibraryTabOrder(order: String) {
+        autoSettingsRepository.setLibraryTabOrder(order)
     }
 
     suspend fun setAutoShowKeyboard(enabled: Boolean) {
@@ -1253,6 +1271,19 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[SettingsKeys.NETEASE_LOCAL_SOURCE_FALLBACK] = enabled }
         updatePlaybackPreferenceSnapshot(context) {
             it.copy(neteaseLocalSourceFallback = enabled)
+        }
+    }
+
+    suspend fun setNeteasePlaybackSourceFallback(enabled: Boolean) {
+        context.dataStore.edit {
+            it[SettingsKeys.NETEASE_AUTO_SOURCE_SWITCH] = enabled
+            it[SettingsKeys.NETEASE_LOCAL_SOURCE_FALLBACK] = enabled
+        }
+        updatePlaybackPreferenceSnapshot(context) {
+            it.copy(
+                neteaseAutoSourceSwitch = enabled,
+                neteaseLocalSourceFallback = enabled
+            )
         }
     }
 

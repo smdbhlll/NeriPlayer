@@ -435,6 +435,30 @@ object AutoSettingsSchema {
         )
 
         @AutoSetting(
+            key = "library_default_tab",
+            type = SettingValueType.String,
+            defaultString = "LOCAL",
+            order = 15,
+            ui = SettingUiType.Custom
+        )
+        val libraryDefaultTab = autoSetting(
+            titleRes = R.string.settings_library_home,
+            descriptionRes = R.string.settings_library_home_desc
+        )
+
+        @AutoSetting(
+            key = "library_tab_order",
+            type = SettingValueType.String,
+            defaultString = "LOCAL,FAVORITE,NETEASE,YTMUSIC,BILI",
+            order = 16,
+            ui = SettingUiType.Custom
+        )
+        val libraryTabOrder = autoSetting(
+            titleRes = R.string.settings_library_tab_order,
+            descriptionRes = R.string.settings_library_tab_order_desc
+        )
+
+        @AutoSetting(
             key = "auto_show_keyboard",
             type = SettingValueType.Boolean,
             defaultBoolean = false,
@@ -466,7 +490,7 @@ object AutoSettingsSchema {
             ui = SettingUiType.Custom
         )
         val homeCardTrending = autoSetting(
-            titleRes = R.string.recommend_trending
+            titleRes = R.string.settings_home_card_netease_trending
         )
 
         @AutoSetting(
@@ -477,7 +501,7 @@ object AutoSettingsSchema {
             ui = SettingUiType.Custom
         )
         val homeCardRadar = autoSetting(
-            titleRes = R.string.recommend_radar
+            titleRes = R.string.settings_home_card_netease_radar
         )
 
         @AutoSetting(
@@ -488,7 +512,7 @@ object AutoSettingsSchema {
             ui = SettingUiType.Custom
         )
         val homeCardRecommended = autoSetting(
-            titleRes = R.string.recommend_for_you
+            titleRes = R.string.settings_home_card_netease_recommended
         )
     }
 
@@ -1476,7 +1500,7 @@ object AutoSettingsSchema {
         @AutoSetting(
             key = "playback_fade_in",
             type = SettingValueType.Boolean,
-            defaultBoolean = false,
+            defaultBoolean = true,
             order = 10,
             ui = SettingUiType.Custom,
             access = SettingAccessMode.KeyOnly
@@ -1489,7 +1513,7 @@ object AutoSettingsSchema {
         @AutoSetting(
             key = "playback_crossfade_next",
             type = SettingValueType.Boolean,
-            defaultBoolean = false,
+            defaultBoolean = true,
             order = 20,
             ui = SettingUiType.Custom,
             access = SettingAccessMode.KeyOnly
@@ -1700,7 +1724,7 @@ object AutoSettingsSchema {
         @AutoSetting(
             key = "netease_auto_source_switch",
             type = SettingValueType.Boolean,
-            defaultBoolean = true,
+            defaultBoolean = false,
             order = 135,
             ui = SettingUiType.Custom,
             access = SettingAccessMode.KeyOnly
@@ -1714,7 +1738,7 @@ object AutoSettingsSchema {
         @AutoSetting(
             key = "netease_local_source_fallback",
             type = SettingValueType.Boolean,
-            defaultBoolean = true,
+            defaultBoolean = false,
             order = 136,
             ui = SettingUiType.Custom,
             access = SettingAccessMode.KeyOnly

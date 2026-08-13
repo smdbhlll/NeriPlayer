@@ -103,13 +103,10 @@ Current positioning:
   to private) or a WebDAV remote file.
 - **Privacy and account safety first**: sync is intentionally decentralized.
   Data is written to GitHub/WebDAV storage that you control, not to a centralized
-  service operated by the project maintainer. The app is technically capable of
-  sending playback history back to third-party music platforms, but centralized
-  music clients often have risk-control and behavior-sampling systems. Uploading
-  local playback history directly may be interpreted as abnormal login or playback
-  behavior and could put an account at risk. To protect account safety,
-  NeriPlayer does not upload local playback history or playback stats back to
-  those platforms.
+  service operated by the project maintainer. Users can independently choose the
+  NetEase and Bilibili account used for play-history reporting. Only playback
+  information required by that platform is reported after eligible playback;
+  local NeriPlayer statistics and records from other platforms are not uploaded.
 - **Single Activity + Compose**: `MainActivity` is the only external entry point.
   The UI is organized by Compose `NavHost`, a dynamic bottom bar, Mini Player,
   and the Now Playing overlay.
@@ -333,8 +330,9 @@ Current positioning:
    ```bash
    adb install -r app/build/outputs/apk/debug/app-debug.apk
    ```
-5. On first launch, read the disclaimer and complete onboarding. Android 13+
-   devices will request notification permission.
+5. On first launch, read the disclaimer and complete onboarding. The flow explains
+   notification and local-music permissions, and requests them only after you choose
+   to allow them; either can be skipped.
 6. For debugging tools, tap the **version number** 7 times in Settings. A
    standalone `Debug` tab will appear in the bottom bar.
 
@@ -350,8 +348,11 @@ For release build and signing details, see
 - 🎧 **Multi-source exploration and playback**:
   supports NetEase Cloud Music, Bilibili, YouTube Music, and local audio.
 - 🏠 **Home recommendations and continue listening**:
-  the Home page supports recently used playlists and recommendation cards.
-  International mode prioritizes YouTube Music home shelves.
+  the Home page supports recently used playlists, all available NetEase recommendation
+  sources, Radar playlists, and recommendation cards. It shows all available
+  charts, new songs, daily picks, Private FM, high-quality playlists, and other
+  feeds together; refreshing updates every section. International mode prioritizes
+  YouTube Music home shelves.
 - 🗂️ **Categorized Library browsing**:
   `Library` includes Local, Favorites, NetEase, YouTube Music, and Bilibili areas.
   YouTube can be fully disabled under Settings > General, which hides its entry
@@ -402,9 +403,10 @@ For release build and signing details, see
   remains off during Listen Together to avoid room-state drift.
 - 🔁 **NetEase playback fallback**:
   when a NetEase song is unavailable, has no playable result, or only returns a
-  preview clip, the player first tries lower quality and can then match a
-  Bilibili fallback candidate by title, artist, and duration. When enabled, it can
-  also match a readable local audio file by stable metadata.
+  preview clip, the player first tries lower quality. Bilibili and local-audio
+  fallback are disabled by default and are attempted only after the user enables
+  them; enabling can match a Bilibili candidate by title, artist, and duration or
+  a readable local audio file by stable metadata.
 - 🧯 **Playback failure fallback**:
   playback errors first try refreshing the active playback URL. Bilibili stream
   resolution retries missing DASH audio and can fall back to html5/mp4 progressive
@@ -1122,9 +1124,9 @@ We will keep improving the project over time.
   history, and playback stats are synced.
 - Audio caches, downloaded files, cookies, and playback tokens are not uploaded
   to the developers.
-- For account safety, the app does not write local playback history or playback
-  stats back to third-party music platforms, because that kind of reporting may
-  be misclassified by platform risk-control systems.
+- Users can choose independent NetEase and Bilibili accounts for platform
+  play-history reporting. These reports do not include NeriPlayer local playback
+  statistics or records from other platforms.
 - Full config export files contain settings, auth data, and sync configuration.
   They are intended for personal migration and should not be shared publicly.
 - Android system cloud backup / device transfer is disabled by default.

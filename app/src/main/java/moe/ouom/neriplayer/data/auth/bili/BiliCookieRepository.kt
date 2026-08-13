@@ -2,29 +2,6 @@
 
 package moe.ouom.neriplayer.data.auth.bili
 
-/*
- * NeriPlayer - A unified Android player for streaming music and videos from multiple online platforms.
- * Copyright (C) 2025-2025 NeriPlayer developers
- * https://github.com/cwuom/NeriPlayer
- *
- * This software is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * This software is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this software.
- * If not, see <https://www.gnu.org/licenses/>.
- *
- * File: moe.ouom.neriplayer.data.auth.bili/BiliCookieRepository
- * Created: 2025/8/13
- */
-
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
@@ -33,76 +10,86 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import moe.ouom.neriplayer.core.logging.NPLogger
+import moe.ouom.neriplayer.data.auth.common.PlatformAccountPurpose
 import moe.ouom.neriplayer.data.auth.common.SavedCookieAuthHealth
 import moe.ouom.neriplayer.data.auth.common.SavedCookieAuthState
-import moe.ouom.neriplayer.core.logging.NPLogger
+import org.json.JSONArray
 import org.json.JSONObject
 
 private const val BILI_AUTH_PREFS = "bili_auth_secure_prefs"
 private const val KEY_BILI_AUTH_BUNDLE = "bili_auth_bundle"
-
 private val Context.biliCookieStore by preferencesDataStore("bili_auth_store")
 
 object BiliCookieKeys {
     val COOKIE_JSON = stringPreferencesKey("bili_cookie_json")
 }
 
-private val BILI_LOGIN_COOKIE_KEYS = listOf(
-    "SESSDATA",
-    "DedeUserID",
-    "bili_jct"
-)
+private val BILI_LOGIN_COOKIE_KEYS = listOf("SESSDATA", "DedeUserID", "bili_jct")
 
 data class BiliAuthBundle(
     val cookies: Map<String, String> = emptyMap(),
     val savedAt: Long = 0L
 ) {
-    fun hasLoginCookies(): Boolean {
-        return !cookies["SESSDATA"].isNullOrBlank()
-    }
-
-    fun normalized(savedAt: Long = this.savedAt): BiliAuthBundle {
-        return copy(
-            cookies = LinkedHashMap(cookies.filterKeys { it.isNotBlank() }),
-            savedAt = savedAt
-        )
-    }
-
-    fun toJson(): String {
-        return JSONObject().apply {
-            put(
-                "cookies",
-                JSONObject().apply {
-                    cookies.forEach { (key, value) -> put(key, value) }
-                }
-            )
-            put("savedAt", savedAt)
-        }.toString()
-    }
+    fun hasLoginCookies(): Boolean = !cookies["SESSDATA"].isNullOrBlank()
+    fun normalized(savedAt: Long = this.savedAt): BiliAuthBundle = copy(
+        cookies = LinkedHashMap(cookies.filterKeys { it.isNotBlank() }),
+        savedAt = savedAt
+    )
+    fun toJson(): String = JSONObject().apply {
+        put("cookies", cookies.toJsonObject())
+        put("savedAt", savedAt)
+    }.toString()
 
     companion object {
-        fun fromJson(json: String): BiliAuthBundle {
-            return runCatching {
-                val root = JSONObject(json)
-                val cookiesJson = root.optJSONObject("cookies") ?: JSONObject()
-                val cookies = linkedMapOf<String, String>()
-                val keys = cookiesJson.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    cookies[key] = cookiesJson.optString(key, "")
-                }
-                val savedAt = root.optLong("savedAt", 0L)
-                BiliAuthBundle(
-                    cookies = cookies,
-                    savedAt = savedAt
-                ).normalized(savedAt = savedAt)
-            }.getOrDefault(BiliAuthBundle())
-        }
+        fun fromJson(json: String): BiliAuthBundle = runCatching {
+            val root = JSONObject(json)
+            BiliAuthBundle(root.optJSONObject("cookies").toStringMap(), root.optLong("savedAt", 0L))
+                .normalized(root.optLong("savedAt", 0L))
+        }.getOrDefault(BiliAuthBundle())
+    }
+}
+
+data class BiliAccount(
+    val id: String,
+    val name: String,
+    val cookies: Map<String, String>,
+    val savedAt: Long
+) {
+    fun toAuthBundle() = BiliAuthBundle(cookies, savedAt)
+}
+
+data class BiliAccountsState(
+    val accounts: List<BiliAccount> = emptyList(),
+    val primaryAccountId: String? = null,
+    val playHistoryAccountId: String? = null,
+    val streamingAccountId: String? = null
+) {
+    fun selectedId(purpose: PlatformAccountPurpose): String? = when (purpose) {
+        PlatformAccountPurpose.PRIMARY -> primaryAccountId
+        PlatformAccountPurpose.PLAY_HISTORY -> playHistoryAccountId ?: primaryAccountId
+        PlatformAccountPurpose.STREAMING -> streamingAccountId ?: primaryAccountId
+    }
+
+    fun account(purpose: PlatformAccountPurpose): BiliAccount? {
+        val id = selectedId(purpose)
+        return accounts.firstOrNull { it.id == id } ?: accounts.firstOrNull()
+    }
+
+    fun normalized(): BiliAccountsState {
+        val ids = accounts.mapTo(linkedSetOf()) { it.id }
+        val primary = primaryAccountId?.takeIf(ids::contains) ?: accounts.firstOrNull()?.id
+        return copy(
+            primaryAccountId = primary,
+            playHistoryAccountId = playHistoryAccountId?.takeIf(ids::contains) ?: primary,
+            streamingAccountId = streamingAccountId?.takeIf(ids::contains) ?: primary
+        )
     }
 }
 
@@ -110,10 +97,8 @@ internal fun evaluateBiliAuthHealth(
     bundle: BiliAuthBundle,
     now: Long = System.currentTimeMillis()
 ): SavedCookieAuthHealth {
-    val normalized = bundle.normalized(savedAt = bundle.savedAt)
-    val loginCookieKeys = BILI_LOGIN_COOKIE_KEYS.filter { key ->
-        !normalized.cookies[key].isNullOrBlank()
-    }
+    val normalized = bundle.normalized(bundle.savedAt)
+    val loginCookieKeys = BILI_LOGIN_COOKIE_KEYS.filter { !normalized.cookies[it].isNullOrBlank() }
     if (!normalized.hasLoginCookies()) {
         return SavedCookieAuthHealth(
             state = SavedCookieAuthState.Missing,
@@ -122,16 +107,10 @@ internal fun evaluateBiliAuthHealth(
             loginCookieKeys = loginCookieKeys
         )
     }
-
-    val savedAt = normalized.savedAt
-    val ageMs = if (savedAt > 0L) {
-        (now - savedAt).coerceAtLeast(0L)
-    } else {
-        Long.MAX_VALUE
-    }
+    val ageMs = if (normalized.savedAt > 0L) (now - normalized.savedAt).coerceAtLeast(0L) else Long.MAX_VALUE
     return SavedCookieAuthHealth(
         state = SavedCookieAuthState.Valid,
-        savedAt = savedAt,
+        savedAt = normalized.savedAt,
         checkedAt = now,
         ageMs = ageMs,
         loginCookieKeys = loginCookieKeys
@@ -139,139 +118,151 @@ internal fun evaluateBiliAuthHealth(
 }
 
 class BiliCookieRepository(private val context: Context) {
-    private var encryptedPrefs: SharedPreferences
-    private val _authFlow: MutableStateFlow<BiliAuthBundle>
-    private val _cookieFlow: MutableStateFlow<Map<String, String>>
-    private val _authHealthFlow: MutableStateFlow<SavedCookieAuthHealth>
+    private var encryptedPrefs: SharedPreferences = openEncryptedPrefsWithRecovery()
+    private val _accountsFlow = MutableStateFlow(loadAccountsState())
+    private val _cookieFlow = MutableStateFlow(cookiesFor(PlatformAccountPurpose.PRIMARY))
+    private val _playHistoryCookieFlow = MutableStateFlow(cookiesFor(PlatformAccountPurpose.PLAY_HISTORY))
+    private val _streamingCookieFlow = MutableStateFlow(cookiesFor(PlatformAccountPurpose.STREAMING))
+    private val _authHealthFlow = MutableStateFlow(evaluateBiliAuthHealth(primaryBundle()))
+    private var addAccountOnNextSave = false
 
-    val cookieFlow: StateFlow<Map<String, String>>
-        get() = _cookieFlow.asStateFlow()
-
-    val authHealthFlow: StateFlow<SavedCookieAuthHealth>
-        get() = _authHealthFlow.asStateFlow()
-
-    init {
-        encryptedPrefs = openEncryptedPrefsWithRecovery()
-        val initialBundle = loadAuthBundle()
-        _authFlow = MutableStateFlow(initialBundle)
-        _cookieFlow = MutableStateFlow(initialBundle.cookies)
-        _authHealthFlow = MutableStateFlow(
-            evaluateBiliAuthHealth(initialBundle)
-        )
-    }
+    val accountsFlow: StateFlow<BiliAccountsState> = _accountsFlow.asStateFlow()
+    val cookieFlow: StateFlow<Map<String, String>> = _cookieFlow.asStateFlow()
+    val playHistoryCookieFlow: StateFlow<Map<String, String>> = _playHistoryCookieFlow.asStateFlow()
+    val streamingCookieFlow: StateFlow<Map<String, String>> = _streamingCookieFlow.asStateFlow()
+    val authHealthFlow: StateFlow<SavedCookieAuthHealth> = _authHealthFlow.asStateFlow()
 
     fun getCookiesOnce(): Map<String, String> = _cookieFlow.value
-
+    fun getPlayHistoryCookiesOnce(): Map<String, String> = _playHistoryCookieFlow.value
+    fun getStreamingCookiesOnce(): Map<String, String> = _streamingCookieFlow.value
     fun getAuthHealthOnce(): SavedCookieAuthHealth = _authHealthFlow.value
+    fun getAuthHealth(now: Long = System.currentTimeMillis()) = evaluateBiliAuthHealth(primaryBundle(), now)
 
-    fun getAuthHealth(
-        now: Long = System.currentTimeMillis()
-    ): SavedCookieAuthHealth = evaluateBiliAuthHealth(_authFlow.value, now)
+    @Synchronized
+    fun beginAddAccount() {
+        addAccountOnNextSave = true
+    }
 
-    fun saveCookies(
-        cookies: Map<String, String>,
-        savedAt: Long = System.currentTimeMillis()
-    ) {
-        val normalized = BiliAuthBundle(
-            cookies = cookies,
+    @Synchronized
+    fun cancelAddAccount() {
+        addAccountOnNextSave = false
+    }
+
+    @Synchronized
+    fun saveCookies(cookies: Map<String, String>, savedAt: Long = System.currentTimeMillis()) {
+        if (cookies["SESSDATA"].isNullOrBlank()) return
+        val normalizedCookies = LinkedHashMap(cookies.filterKeys { it.isNotBlank() })
+        val current = _accountsFlow.value
+        val updatedAccounts = current.accounts.toMutableList()
+        val targetIndex = if (addAccountOnNextSave) -1 else updatedAccounts.indexOfFirst { it.id == current.primaryAccountId }
+        val account = BiliAccount(
+            id = if (targetIndex >= 0) updatedAccounts[targetIndex].id else UUID.randomUUID().toString(),
+            name = if (targetIndex >= 0) updatedAccounts[targetIndex].name else defaultAccountName(updatedAccounts.size + 1),
+            cookies = normalizedCookies,
             savedAt = savedAt
-        ).normalized(savedAt = savedAt)
-        encryptedPrefs.edit {
-            putString(KEY_BILI_AUTH_BUNDLE, normalized.toJson())
+        )
+        if (targetIndex >= 0) updatedAccounts[targetIndex] = account else updatedAccounts += account
+        addAccountOnNextSave = false
+        persistAndPublish(current.copy(
+            accounts = updatedAccounts,
+            primaryAccountId = current.primaryAccountId ?: account.id
+        ).normalized())
+    }
+
+    @Synchronized
+    fun renameAccount(accountId: String, name: String) {
+        val cleanName = name.trim().take(40)
+        if (cleanName.isBlank()) return
+        persistAndPublish(_accountsFlow.value.copy(
+            accounts = _accountsFlow.value.accounts.map { if (it.id == accountId) it.copy(name = cleanName) else it }
+        ).normalized())
+    }
+
+    @Synchronized
+    fun selectAccount(purpose: PlatformAccountPurpose, accountId: String) {
+        if (_accountsFlow.value.accounts.none { it.id == accountId }) return
+        val current = _accountsFlow.value
+        val updated = when (purpose) {
+            PlatformAccountPurpose.PRIMARY -> current.copy(primaryAccountId = accountId)
+            PlatformAccountPurpose.PLAY_HISTORY -> current.copy(playHistoryAccountId = accountId)
+            PlatformAccountPurpose.STREAMING -> current.copy(streamingAccountId = accountId)
         }
-        _authFlow.value = normalized
-        _cookieFlow.value = normalized.cookies
-        _authHealthFlow.value = evaluateBiliAuthHealth(normalized)
-        NPLogger.d("NERI-BiliCookieRepo", "Saved Bili cookies: keys=${cookies.keys.joinToString()}")
+        persistAndPublish(updated.normalized())
+    }
+
+    @Synchronized
+    fun deleteAccount(accountId: String) {
+        persistAndPublish(_accountsFlow.value.copy(
+            accounts = _accountsFlow.value.accounts.filterNot { it.id == accountId }
+        ).normalized())
     }
 
     fun clear() {
-        encryptedPrefs.edit {
-            remove(KEY_BILI_AUTH_BUNDLE)
-        }
-        val cleared = BiliAuthBundle()
-        _authFlow.value = cleared
-        _cookieFlow.value = cleared.cookies
-        _authHealthFlow.value = evaluateBiliAuthHealth(cleared)
-        NPLogger.d("NERI-BiliCookieRepo", "Cleared Bili cookies")
+        val primaryId = _accountsFlow.value.primaryAccountId ?: return
+        deleteAccount(primaryId)
+    }
+
+    fun clearAllAccounts() {
+        persistAndPublish(BiliAccountsState())
     }
 
     fun refreshHealth(now: Long = System.currentTimeMillis()) {
-        _authHealthFlow.value = evaluateBiliAuthHealth(
-            bundle = _authFlow.value,
-            now = now
-        )
+        _authHealthFlow.value = evaluateBiliAuthHealth(primaryBundle(), now)
     }
 
-    private fun loadAuthBundle(): BiliAuthBundle {
+    private fun primaryBundle() = _accountsFlow.value.account(PlatformAccountPurpose.PRIMARY)?.toAuthBundle()
+        ?: BiliAuthBundle()
+    private fun cookiesFor(purpose: PlatformAccountPurpose) = _accountsFlow.value.account(purpose)?.cookies.orEmpty()
+
+    private fun persistAndPublish(state: BiliAccountsState) {
+        val normalized = state.normalized()
+        encryptedPrefs.edit { putString(KEY_BILI_AUTH_BUNDLE, normalized.toJson()) }
+        _accountsFlow.value = normalized
+        _cookieFlow.value = normalized.account(PlatformAccountPurpose.PRIMARY)?.cookies.orEmpty()
+        _playHistoryCookieFlow.value = normalized.account(PlatformAccountPurpose.PLAY_HISTORY)?.cookies.orEmpty()
+        _streamingCookieFlow.value = normalized.account(PlatformAccountPurpose.STREAMING)?.cookies.orEmpty()
+        _authHealthFlow.value = evaluateBiliAuthHealth(primaryBundle())
+    }
+
+    private fun loadAccountsState(): BiliAccountsState {
         val raw = encryptedPrefs.getString(KEY_BILI_AUTH_BUNDLE, null).orEmpty()
         if (raw.isNotBlank()) {
-            return BiliAuthBundle.fromJson(raw)
+            val root = runCatching { JSONObject(raw) }.getOrNull()
+            if (root?.has("accounts") == true) return root.toBiliAccountsState()
+            val legacy = BiliAuthBundle.fromJson(raw)
+            if (legacy.hasLoginCookies()) return singleAccountState(legacy)
         }
-
-        return migrateLegacyCookies() ?: BiliAuthBundle()
+        return migrateLegacyCookies()?.let(::singleAccountState) ?: BiliAccountsState()
     }
 
-    private fun loadLegacyCookies(): Map<String, String> {
-        return runCatching {
-            val prefs = runBlocking { context.biliCookieStore.data.first() }
-            val json = prefs[BiliCookieKeys.COOKIE_JSON] ?: "{}"
-            jsonToMap(json)
-        }.getOrDefault(emptyMap())
+    private fun singleAccountState(bundle: BiliAuthBundle): BiliAccountsState {
+        val id = UUID.randomUUID().toString()
+        return BiliAccountsState(
+            accounts = listOf(BiliAccount(id, defaultAccountName(1), bundle.cookies, bundle.savedAt)),
+            primaryAccountId = id,
+            playHistoryAccountId = id,
+            streamingAccountId = id
+        ).also { encryptedPrefs.edit { putString(KEY_BILI_AUTH_BUNDLE, it.toJson()) } }
     }
 
     private fun migrateLegacyCookies(): BiliAuthBundle? {
-        val legacyCookies = loadLegacyCookies()
-        if (legacyCookies.isEmpty()) {
-            return null
-        }
-
-        val migrated = BiliAuthBundle(
-            cookies = legacyCookies,
-            savedAt = 0L
-        ).normalized(savedAt = 0L)
-        encryptedPrefs.edit {
-            putString(KEY_BILI_AUTH_BUNDLE, migrated.toJson())
-        }
-        runCatching {
-            runBlocking {
-                context.biliCookieStore.edit { prefs ->
-                    prefs.remove(BiliCookieKeys.COOKIE_JSON)
-                }
-            }
-        }
-        return migrated
+        val prefs = runCatching { runBlocking { context.biliCookieStore.data.first() } }.getOrNull() ?: return null
+        val cookies = prefs[BiliCookieKeys.COOKIE_JSON].orEmpty().toCookieMap()
+        if (cookies["SESSDATA"].isNullOrBlank()) return null
+        runCatching { runBlocking { context.biliCookieStore.edit { it.remove(BiliCookieKeys.COOKIE_JSON) } } }
+        return BiliAuthBundle(cookies, 0L)
     }
 
-    private fun jsonToMap(json: String): Map<String, String> {
-        val obj = JSONObject(json)
-        val out = LinkedHashMap<String, String>()
-        val keys = obj.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            out[key] = obj.optString(key, "")
-        }
-        return out
-    }
+    private fun defaultAccountName(index: Int) = "哔哩哔哩账号 $index"
 
-    private fun openEncryptedPrefsWithRecovery(): SharedPreferences {
-        return runCatching {
-            createEncryptedPrefs()
-        }.getOrElse { error ->
-            NPLogger.w(
-                "NERI-BiliCookieRepo",
-                "Failed to open Bili secure prefs, clearing storage and recreating.",
-                error
-            )
-            clearEncryptedStorage()
-            createEncryptedPrefs()
-        }
+    private fun openEncryptedPrefsWithRecovery(): SharedPreferences = runCatching { createEncryptedPrefs() }.getOrElse {
+        NPLogger.w("NERI-BiliCookieRepo", "Failed to open Bili secure prefs, recreating", it)
+        context.deleteSharedPreferences(BILI_AUTH_PREFS)
+        createEncryptedPrefs()
     }
 
     private fun createEncryptedPrefs(): SharedPreferences {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
         return EncryptedSharedPreferences.create(
             context,
             BILI_AUTH_PREFS,
@@ -280,16 +271,56 @@ class BiliCookieRepository(private val context: Context) {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
     }
+}
 
-    private fun clearEncryptedStorage() {
-        runCatching {
-            context.deleteSharedPreferences(BILI_AUTH_PREFS)
-        }.onFailure { error ->
-            NPLogger.w(
-                "NERI-BiliCookieRepo",
-                "Failed to delete corrupted Bili secure prefs file.",
-                error
-            )
+private fun BiliAccountsState.toJson(): String = JSONObject().apply {
+    put("version", 2)
+    put("accounts", JSONArray().apply {
+        accounts.forEach { account ->
+            put(JSONObject().apply {
+                put("id", account.id)
+                put("name", account.name)
+                put("cookies", account.cookies.toJsonObject())
+                put("savedAt", account.savedAt)
+            })
+        }
+    })
+    put("primaryAccountId", primaryAccountId)
+    put("playHistoryAccountId", playHistoryAccountId)
+    put("streamingAccountId", streamingAccountId)
+}.toString()
+
+private fun JSONObject.toBiliAccountsState(): BiliAccountsState = runCatching {
+    val array = optJSONArray("accounts") ?: JSONArray()
+    val accounts = buildList {
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val cookies = item.optJSONObject("cookies").toStringMap()
+            if (!cookies["SESSDATA"].isNullOrBlank()) {
+                add(BiliAccount(
+                    id = item.optString("id").ifBlank { UUID.randomUUID().toString() },
+                    name = item.optString("name").ifBlank { "哔哩哔哩账号 ${index + 1}" },
+                    cookies = cookies,
+                    savedAt = item.optLong("savedAt", 0L)
+                ))
+            }
         }
     }
+    BiliAccountsState(
+        accounts = accounts,
+        primaryAccountId = optString("primaryAccountId").takeIf { it.isNotBlank() },
+        playHistoryAccountId = optString("playHistoryAccountId").takeIf { it.isNotBlank() },
+        streamingAccountId = optString("streamingAccountId").takeIf { it.isNotBlank() }
+    ).normalized()
+}.getOrDefault(BiliAccountsState())
+
+private fun Map<String, String>.toJsonObject() = JSONObject().apply { forEach { (key, value) -> put(key, value) } }
+private fun JSONObject?.toStringMap(): Map<String, String> = linkedMapOf<String, String>().apply {
+    val source = this@toStringMap ?: return@apply
+    val keys = source.keys()
+    while (keys.hasNext()) {
+        val key = keys.next()
+        put(key, source.optString(key, ""))
+    }
 }
+private fun String.toCookieMap(): Map<String, String> = runCatching { JSONObject(this).toStringMap() }.getOrDefault(emptyMap())

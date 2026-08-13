@@ -82,7 +82,7 @@ class ConditionalHttpDataSourceFactory(
 
     init {
         scope.launch {
-            cookieRepo.cookieFlow.collect { cookies ->
+            cookieRepo.streamingCookieFlow.collect { cookies ->
                 latestCookieHeader = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
             }
         }

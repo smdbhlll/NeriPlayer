@@ -51,6 +51,7 @@ import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -67,6 +68,8 @@ import moe.ouom.neriplayer.ui.screen.playlist.BiliPlaylistDetailScreen
 import moe.ouom.neriplayer.ui.screen.playlist.YouTubeMusicPlaylistDetailScreen
 import moe.ouom.neriplayer.ui.screen.tab.LibraryTab
 import moe.ouom.neriplayer.ui.screen.tab.LibraryScreen
+import moe.ouom.neriplayer.ui.screen.tab.libraryTabDisplayOrder
+import moe.ouom.neriplayer.ui.screen.tab.resolveLibraryDefaultTab
 import moe.ouom.neriplayer.data.model.NeteaseArtistSummary
 import moe.ouom.neriplayer.ui.viewmodel.tab.AlbumSummary
 import moe.ouom.neriplayer.ui.viewmodel.tab.PlaylistSummary
@@ -188,7 +191,22 @@ fun LibraryHostScreen(
     var pendingTopAppBarHeightOffset by rememberSaveable { mutableFloatStateOf(Float.NaN) }
     var pendingTopAppBarContentOffset by rememberSaveable { mutableFloatStateOf(Float.NaN) }
     // 保存当前选中的标签页类型，避免国际化切换后索引错位
-    var selectedTab by rememberSaveable { mutableStateOf(LibraryTab.LOCAL) }
+    val isInternational by AppContainer.settingsRepo.internationalizationEnabledFlow
+        .collectAsStateWithLifecycle(initialValue = false)
+    val youtubeEnabled by AppContainer.settingsRepo.youtubeEnabledFlow
+        .collectAsStateWithLifecycle(initialValue = true)
+    val libraryTabOrder by AppContainer.settingsRepo.libraryTabOrderFlow
+        .collectAsStateWithLifecycle(initialValue = "LOCAL,FAVORITE,NETEASE,YTMUSIC,BILI")
+    val libraryDefaultTab by AppContainer.settingsRepo.libraryDefaultTabFlow
+        .collectAsStateWithLifecycle(initialValue = LibraryTab.LOCAL.name)
+    val availableLibraryTabs = remember(isInternational, youtubeEnabled, libraryTabOrder) {
+        libraryTabDisplayOrder(isInternational, youtubeEnabled, libraryTabOrder)
+    }
+    val resolvedDefaultTab = remember(libraryDefaultTab, availableLibraryTabs) {
+        resolveLibraryDefaultTab(libraryDefaultTab, availableLibraryTabs)
+    }
+    var selectedTab by rememberSaveable { mutableStateOf<LibraryTab?>(null) }
+    val activeLibraryTab = selectedTab?.takeIf { it in availableLibraryTabs } ?: resolvedDefaultTab
     val libraryStateHolder = rememberSaveableStateHolder()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -323,7 +341,7 @@ fun LibraryHostScreen(
 
     fun sourceForFavoriteAwareDestination(
         regularSource: LibraryScrollSource
-    ): LibraryScrollSource = if (selectedTab == LibraryTab.FAVORITE) {
+    ): LibraryScrollSource = if (activeLibraryTab == LibraryTab.FAVORITE) {
         LibraryScrollSource.Favorite
     } else {
         regularSource
@@ -422,7 +440,7 @@ fun LibraryHostScreen(
                         ) {
                             libraryStateHolder.SaveableStateProvider("library_screen") {
                                 LibraryScreen(
-                            initialTab = selectedTab,
+                            initialTab = activeLibraryTab,
                             onTabChange = { selectedTab = it },
                             localListState = localListState,
                             favoriteListState = favoriteListState,

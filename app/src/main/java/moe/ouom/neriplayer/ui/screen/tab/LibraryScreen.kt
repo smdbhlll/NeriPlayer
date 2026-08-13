@@ -254,28 +254,39 @@ private fun rememberHotPlaylists(): List<PlaybackStatsHotPlaylist>? {
 
 internal fun libraryTabDisplayOrder(
     isInternational: Boolean,
-    youtubeEnabled: Boolean = true
+    youtubeEnabled: Boolean = true,
+    persistedOrder: String? = null
 ): List<LibraryTab> {
-    val orderedTabs = if (isInternational && youtubeEnabled) {
-        listOf(
-            LibraryTab.LOCAL,
-            LibraryTab.FAVORITE,
-            LibraryTab.YTMUSIC,
-            LibraryTab.NETEASE,
-            LibraryTab.BILI,
-            LibraryTab.QQMUSIC
-        )
+    val fallbackOrder = if (isInternational) {
+        listOf(LibraryTab.LOCAL, LibraryTab.FAVORITE, LibraryTab.NETEASE, LibraryTab.YTMUSIC, LibraryTab.BILI)
     } else {
-        listOf(
-            LibraryTab.LOCAL,
-            LibraryTab.FAVORITE,
-            LibraryTab.NETEASE,
-            LibraryTab.YTMUSIC,
-            LibraryTab.BILI,
-            LibraryTab.QQMUSIC
-        )
+        listOf(LibraryTab.LOCAL, LibraryTab.FAVORITE, LibraryTab.NETEASE, LibraryTab.YTMUSIC, LibraryTab.BILI)
     }
+    val configuredOrder = persistedOrder
+        ?.split(',')
+        ?.mapNotNull { value -> value.trim().uppercase().let { name ->
+            runCatching { LibraryTab.valueOf(name) }.getOrNull()
+        } }
+        ?.filter { it != LibraryTab.QQMUSIC }
+        ?.distinct()
+        .orEmpty()
+    val orderedTabs = (configuredOrder + fallbackOrder).distinct()
     return if (youtubeEnabled) orderedTabs else orderedTabs - LibraryTab.YTMUSIC
+}
+
+internal fun normalizeLibraryTabOrder(raw: String?): List<LibraryTab> {
+    val fallback = listOf(LibraryTab.LOCAL, LibraryTab.FAVORITE, LibraryTab.NETEASE, LibraryTab.YTMUSIC, LibraryTab.BILI)
+    val parsed = raw.orEmpty().split(',').mapNotNull { value ->
+        runCatching { LibraryTab.valueOf(value.trim().uppercase()) }.getOrNull()
+    }.filter { it != LibraryTab.QQMUSIC }.distinct()
+    return (parsed + fallback).distinct()
+}
+
+internal fun resolveLibraryDefaultTab(raw: String?, availableTabs: List<LibraryTab>): LibraryTab {
+    val candidate = raw?.trim()?.uppercase()?.let { runCatching { LibraryTab.valueOf(it) }.getOrNull() }
+    return candidate?.takeIf { it in availableTabs && it != LibraryTab.QQMUSIC }
+        ?: availableTabs.firstOrNull()
+        ?: LibraryTab.LOCAL
 }
 
 private fun LibraryTab.asVisibleLibraryTab(): LibraryTab {
@@ -327,8 +338,10 @@ fun LibraryScreen(
         .collectAsStateWithLifecycle(initialValue = false)
     val youtubeEnabled by AppContainer.settingsRepo.youtubeEnabledFlow
         .collectAsStateWithLifecycle(initialValue = YouTubeFeatureGate.isEnabled())
-    val orderedTabs = remember(isInternational, youtubeEnabled) {
-        libraryTabDisplayOrder(isInternational, youtubeEnabled)
+    val libraryTabOrder by AppContainer.settingsRepo.libraryTabOrderFlow
+        .collectAsStateWithLifecycle(initialValue = "LOCAL,FAVORITE,NETEASE,YTMUSIC,BILI")
+    val orderedTabs = remember(isInternational, youtubeEnabled, libraryTabOrder) {
+        libraryTabDisplayOrder(isInternational, youtubeEnabled, libraryTabOrder)
     }
     val initialPage = remember(orderedTabs, initialTab) {
         orderedTabs.indexOf(initialTab.asVisibleLibraryTab()).takeIf { it >= 0 } ?: 0

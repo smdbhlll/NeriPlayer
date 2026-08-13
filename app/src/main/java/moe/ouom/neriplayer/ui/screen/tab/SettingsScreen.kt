@@ -36,10 +36,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -124,6 +121,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import moe.ouom.neriplayer.R
 import moe.ouom.neriplayer.core.di.AppContainer
 import moe.ouom.neriplayer.core.download.GlobalDownloadManager
@@ -157,11 +155,13 @@ import moe.ouom.neriplayer.data.settings.normalizeLyricFontScale
 import moe.ouom.neriplayer.data.settings.scaledLyricFontSize
 import moe.ouom.neriplayer.data.storage.StorageCacheClearOptions
 import moe.ouom.neriplayer.data.storage.StorageUsageSummary
+import moe.ouom.neriplayer.data.storage.analyzeStorageUsage
 import moe.ouom.neriplayer.listentogether.invite.configuredListenTogetherBaseUrlOrNull
 import moe.ouom.neriplayer.listentogether.invite.isDefaultListenTogetherBaseUrl
 import moe.ouom.neriplayer.listentogether.invite.resolveListenTogetherBaseUrl
 import moe.ouom.neriplayer.listentogether.validation.validateListenTogetherNickname
 import moe.ouom.neriplayer.ui.component.settings.LanguageSettingItem
+import moe.ouom.neriplayer.util.platform.LanguageManager
 import moe.ouom.neriplayer.ui.effect.glass.AdvancedGlassNavigationHandoff
 import moe.ouom.neriplayer.ui.effect.glass.AdvancedGlassRole
 import moe.ouom.neriplayer.ui.effect.glass.AdvancedGlassScene
@@ -170,7 +170,9 @@ import moe.ouom.neriplayer.ui.effect.glass.LocalAdvancedGlassController
 import moe.ouom.neriplayer.ui.effect.glass.isolatedAdvancedGlassHorizontalTransition
 import moe.ouom.neriplayer.ui.screen.tab.settings.about.SettingsAboutContent
 import moe.ouom.neriplayer.ui.screen.tab.settings.auth.LoginSuccessDialog
+import moe.ouom.neriplayer.ui.screen.tab.settings.auth.AccountManagementItem
 import moe.ouom.neriplayer.ui.screen.tab.settings.auth.SettingsBiliAuthDialogs
+import moe.ouom.neriplayer.ui.screen.tab.settings.auth.SettingsMultiAccountDialog
 import moe.ouom.neriplayer.ui.screen.tab.settings.auth.SettingsNeteaseAuthDialogs
 import moe.ouom.neriplayer.ui.screen.tab.settings.auth.SettingsYouTubeAuthDialogs
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.LazyAnimatedVisibility
@@ -182,6 +184,7 @@ import moe.ouom.neriplayer.ui.screen.tab.settings.component.SettingsLyricsSectio
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.SettingsMotionSection
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.SettingsPlaybackSection
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.SettingsStorageCacheSection
+import moe.ouom.neriplayer.ui.screen.tab.settings.component.StorageCacheDetailsContent
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.SettingsTrafficManagementSection
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.ThemeModeActionButton
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.ThemeSeedListItem
@@ -189,6 +192,7 @@ import moe.ouom.neriplayer.ui.screen.tab.settings.component.UsbExclusiveSettings
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.YouTubePlaybackSourceSetting
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.settingsItemClickable
 import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsGitHubDialogs
+import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsLibraryPreferencesDialog
 import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsPreferenceDialogs
 import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsWebDavDialogs
 import moe.ouom.neriplayer.ui.screen.tab.settings.miuix.MiuixSettingsChoiceRow
@@ -215,6 +219,7 @@ import moe.ouom.neriplayer.ui.screen.tab.settings.page.miuixSettingsSectionCardI
 import moe.ouom.neriplayer.ui.screen.tab.settings.page.searchSettingsEntries
 import moe.ouom.neriplayer.ui.screen.tab.settings.page.settingsSearchScrollAnchor
 import moe.ouom.neriplayer.ui.screen.tab.settings.page.settingsHighlightTarget
+import moe.ouom.neriplayer.ui.screen.tab.LibraryTab
 import moe.ouom.neriplayer.ui.screen.tab.settings.state.collectAsStateWithLifecycleCompat
 import moe.ouom.neriplayer.ui.screen.tab.settings.state.formatSyncTime
 import moe.ouom.neriplayer.ui.feedback.AppFeedback
@@ -256,6 +261,42 @@ private fun isForwardSettingsPageTransition(
     if (targetPage.backTargetPage() == initialPage) return true
     if (initialPage.backTargetPage() == targetPage) return false
     return targetPage.ordinal >= initialPage.ordinal
+}
+
+@Composable
+internal fun SettingsPageHost(
+    activePage: SettingsPage?,
+    splitLayout: Boolean,
+    isolateAdvancedGlassTransitions: Boolean,
+    content: @Composable (SettingsPage?) -> Unit
+) {
+    if (splitLayout) {
+        AdvancedGlassScene(active = true) {
+            content(activePage)
+        }
+        return
+    }
+
+    AnimatedContent(
+        targetState = activePage,
+        modifier = Modifier.fillMaxSize(),
+        label = "settings_page_switch",
+        transitionSpec = {
+            isolatedAdvancedGlassHorizontalTransition(
+                forward = isForwardSettingsPageTransition(initialState, targetState)
+            ).using(SizeTransform(clip = true))
+        }
+    ) { selectedPage ->
+        AdvancedGlassNavigationHandoff(
+            enabled = isolateAdvancedGlassTransitions && transition.isRunning
+        ) {
+            AdvancedGlassScene(
+                active = isolateAdvancedGlassTransitions || selectedPage == activePage
+            ) {
+                content(selectedPage)
+            }
+        }
+    }
 }
 
 private fun Context.neteaseQualityLabel(value: String): String {
@@ -544,6 +585,7 @@ fun SettingsScreen(
     onMaxCacheSizeBytesChange: (Long) -> Unit,
     onClearCacheClick: (StorageCacheClearOptions) -> Unit,
     onBeforeLanguageRestart: () -> Unit = {},
+    onLanguageChanged: (LanguageManager.Language) -> Unit = {},
 ) {
     val context = LocalContext.current
     val composeResources = LocalResources.current
@@ -600,11 +642,17 @@ fun SettingsScreen(
     var clearImageCache by remember { mutableStateOf(true) }
     var clearDownloadStagingCache by remember { mutableStateOf(false) }
     var clearSharedMediaCache by remember { mutableStateOf(false) }
-    var clearPlatformListCache by remember { mutableStateOf(false) }
+    var clearNeteasePlaylistCache by remember { mutableStateOf(false) }
+    var clearBiliFavoriteCache by remember { mutableStateOf(false) }
+    var clearBiliArchiveCache by remember { mutableStateOf(false) }
+    var clearYoutubePlaylistCache by remember { mutableStateOf(false) }
+    var clearLogFiles by remember { mutableStateOf(false) }
+    var clearCrashLogs by remember { mutableStateOf(false) }
 
     // 存储占用详情状态
-    var showStorageDetails by remember { mutableStateOf(false) }
     var storageDetails by remember { mutableStateOf(StorageUsageSummary.Empty) }
+    var storageDetailsLoading by remember { mutableStateOf(false) }
+    var storageScanRequest by rememberSaveable { mutableIntStateOf(0) }
 
 
     // 各种对话框和弹窗的显示状态 //
@@ -616,10 +664,13 @@ fun SettingsScreen(
     var showMobileDataYouTubeQualityDialog by remember { mutableStateOf(false) }
     var showMobileDataBiliQualityDialog by remember { mutableStateOf(false) }
     var showDefaultStartDestinationDialog by remember { mutableStateOf(false) }
+    var showLibraryPreferencesDialog by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var showNeteaseSavedCookieDialog by remember { mutableStateOf(false) }
     var showBiliSheet by remember { mutableStateOf(false) }
     var showBiliSavedCookieDialog by remember { mutableStateOf(false) }
+    var showBiliAccountsDialog by remember { mutableStateOf(false) }
+    var showNeteaseAccountsDialog by remember { mutableStateOf(false) }
     var showYouTubeSheet by remember { mutableStateOf(false) }
     var showYouTubeSavedCookieDialog by remember { mutableStateOf(false) }
 
@@ -980,36 +1031,33 @@ fun SettingsScreen(
     val homeTrendingLabelRes = if (internationalEnabled) {
         R.string.home_ytmusic_guess_you_like
     } else {
-        R.string.recommend_trending
+        R.string.settings_home_card_netease_trending
     }
     val homeRadarLabelRes = if (internationalEnabled) {
         R.string.home_ytmusic_daily_discover
     } else {
-        R.string.recommend_radar
+        R.string.settings_home_card_netease_radar
     }
     val homeRecommendedLabelRes = if (internationalEnabled) {
         R.string.home_ytmusic_more_recommendations
     } else {
-        R.string.recommend_for_you
+        R.string.settings_home_card_netease_recommended
     }
     val homeTrendingSupportingRes = if (internationalEnabled) {
         R.string.settings_home_card_ytmusic_guess_you_like_desc
     } else {
-        null
+        R.string.settings_home_card_netease_trending_desc
     }
     val homeRadarSupportingRes = if (internationalEnabled) {
         R.string.settings_home_card_ytmusic_daily_discover_desc
     } else {
-        null
+        R.string.settings_home_card_netease_radar_desc
     }
     val homeRecommendedSupportingRes = if (internationalEnabled) {
         R.string.settings_home_card_ytmusic_more_recommendations_desc
     } else {
-        null
+        R.string.settings_home_card_netease_recommended_desc
     }
-    val neteaseHomeCardAuthHealth by AppContainer.neteaseCookieRepo.authHealthFlow.collectAsStateWithLifecycleCompat()
-    val neteaseHomeCardsEnabled = internationalEnabled ||
-        neteaseHomeCardAuthHealth.state != SavedCookieAuthState.Missing
     val effectiveDefaultStartDestination = remember(defaultStartDestination, homeStartAvailable) {
         if (!homeStartAvailable && defaultStartDestination == "home") {
             "explore"
@@ -1086,6 +1134,27 @@ fun SettingsScreen(
     val isSettingsSplitLayout = currentWindowWidthDp() >= 840.dp
     var activeSettingsPage by rememberSaveable {
         mutableStateOf(if (isSettingsSplitLayout) SettingsPage.General else null)
+    }
+    fun refreshStorageDetails() {
+        if (storageDetailsLoading) return
+        storageScanRequest++
+    }
+
+    LaunchedEffect(storageScanRequest) {
+        if (storageScanRequest == 0) return@LaunchedEffect
+        storageDetailsLoading = true
+        yield()
+        try {
+            storageDetails = analyzeStorageUsage(context)
+        } finally {
+            storageDetailsLoading = false
+        }
+    }
+
+    LaunchedEffect(activeSettingsPage) {
+        if (activeSettingsPage == SettingsPage.StorageCacheDetails && storageDetails == StorageUsageSummary.Empty) {
+            refreshStorageDetails()
+        }
     }
     LaunchedEffect(activeSettingsPage, context) {
         if (activeSettingsPage == SettingsPage.Backup) {
@@ -1220,35 +1289,16 @@ fun SettingsScreen(
         }
     }
 
-    AnimatedContent(
-        targetState = activeSettingsPage,
-        modifier = Modifier.fillMaxSize(),
-        label = "settings_page_switch",
-        transitionSpec = {
-            if (isSettingsSplitLayout) {
-                EnterTransition.None togetherWith ExitTransition.None
-            } else {
-                isolatedAdvancedGlassHorizontalTransition(
-                    forward = isForwardSettingsPageTransition(initialState, targetState)
-                ).using(SizeTransform(clip = true))
-            }
-        }
-    ) { selectedPage ->
-        AdvancedGlassNavigationHandoff(
-            enabled = isolateAdvancedGlassTransitions && transition.isRunning
-        ) {
-            AdvancedGlassScene(
-                active = isolateAdvancedGlassTransitions || selectedPage == activeSettingsPage
-            ) {
-                if (selectedPage == null) {
-                    MiuixSettingsHomeScaffold(
-                        listState = listState,
-                        topAppBarState = homeTopAppBarState,
-                        title = settingsHomeTitle,
-                        content = settingsHomeContent
-                    )
-                } else {
-                    MiuixSettingsResponsiveDetailScaffold(
+    val settingsPageContent: @Composable (SettingsPage?) -> Unit = { selectedPage ->
+        if (selectedPage == null) {
+            MiuixSettingsHomeScaffold(
+                listState = listState,
+                topAppBarState = homeTopAppBarState,
+                title = settingsHomeTitle,
+                content = settingsHomeContent
+            )
+        } else {
+            MiuixSettingsResponsiveDetailScaffold(
                 title = stringResource(selectedPage.titleRes),
                 onBack = ::navigateBackFromActiveSettingsPage,
                 listState = detailListStates.getValue(selectedPage),
@@ -1260,7 +1310,7 @@ fun SettingsScreen(
                 homeTopAppBarState = homeTopAppBarState,
                 homeTitle = settingsHomeTitle,
                 homeContent = settingsHomeContent
-                ) {
+            ) {
                 item(key = "${selectedPage.name}:header") {
                     MiuixSettingsHeader(
                         icon = selectedPage.icon,
@@ -1301,7 +1351,7 @@ fun SettingsScreen(
                                 highlightPulse = settingsHighlightPulse,
                                 onHighlightFinished = onSettingsHighlightFinished
                             ),
-                            onBeforeRestart = onBeforeLanguageRestart
+                            onLanguageChanged = onLanguageChanged
                         )
                         ListItem(
                             modifier = Modifier.settingsHighlightTarget(
@@ -1459,22 +1509,16 @@ fun SettingsScreen(
                             biliVm = biliVm,
                             youtubeVm = youtubeVm,
                             neteaseVm = neteaseVm,
+                            onOpenBiliAccounts = { showBiliAccountsDialog = true },
+                            onOpenNeteaseAccounts = { showNeteaseAccountsDialog = true },
                             onOpenBiliSheet = { tab ->
                                 inlineMsg = null
                                 biliSheetInitialTab = tab
                                 showBiliSheet = true
                             },
-                            onOpenBiliSavedCookieDialog = {
-                                inlineMsg = null
-                                showBiliSavedCookieDialog = true
-                            },
                             onOpenYouTubeSavedCookieDialog = {
                                 inlineMsg = null
                                 showYouTubeSavedCookieDialog = true
-                            },
-                            onOpenNeteaseSavedCookieDialog = {
-                                inlineMsg = null
-                                showNeteaseSavedCookieDialog = true
                             },
                             onOpenYouTubeSheet = {
                                 inlineMsg = null
@@ -1498,6 +1542,7 @@ fun SettingsScreen(
                                 scope = scope,
                                 defaultStartDestinationLabel = defaultStartDestinationLabel,
                                 onOpenDefaultStartDestination = { showDefaultStartDestinationDialog = true },
+                                onOpenLibraryPreferences = { showLibraryPreferencesDialog = true },
                                 internationalEnabled = internationalEnabled,
                                 homeTrendingLabelRes = homeTrendingLabelRes,
                                 homeRadarLabelRes = homeRadarLabelRes,
@@ -1505,7 +1550,6 @@ fun SettingsScreen(
                                 homeTrendingSupportingRes = homeTrendingSupportingRes,
                                 homeRadarSupportingRes = homeRadarSupportingRes,
                                 homeRecommendedSupportingRes = homeRecommendedSupportingRes,
-                                neteaseHomeCardsEnabled = neteaseHomeCardsEnabled,
                                 homeStartAvailable = homeStartAvailable,
                                 showHomeContinueCard = showHomeContinueCard,
                                 onShowHomeContinueCardChange = onShowHomeContinueCardChange,
@@ -1935,10 +1979,11 @@ fun SettingsScreen(
                                 onDownloadFileNameTemplateChange = onDownloadFileNameTemplateChange,
                                 maxCacheSizeBytes = maxCacheSizeBytes,
                                 onMaxCacheSizeBytesChange = onMaxCacheSizeBytesChange,
-                                showStorageDetails = showStorageDetails,
-                                onShowStorageDetailsChange = { showStorageDetails = it },
+                                onOpenStorageDetails = {
+                                    activeSettingsPage = SettingsPage.StorageCacheDetails
+                                    refreshStorageDetails()
+                                },
                                 storageDetails = storageDetails,
-                                onStorageDetailsChange = { storageDetails = it },
                                 showClearCacheDialog = showClearCacheDialog,
                                 onShowClearCacheDialogChange = { showClearCacheDialog = it },
                                 clearAudioCache = clearAudioCache,
@@ -1949,8 +1994,18 @@ fun SettingsScreen(
                                 onClearDownloadStagingCacheChange = { clearDownloadStagingCache = it },
                                 clearSharedMediaCache = clearSharedMediaCache,
                                 onClearSharedMediaCacheChange = { clearSharedMediaCache = it },
-                                clearPlatformListCache = clearPlatformListCache,
-                                onClearPlatformListCacheChange = { clearPlatformListCache = it },
+                                clearNeteasePlaylistCache = clearNeteasePlaylistCache,
+                                onClearNeteasePlaylistCacheChange = { clearNeteasePlaylistCache = it },
+                                clearBiliFavoriteCache = clearBiliFavoriteCache,
+                                onClearBiliFavoriteCacheChange = { clearBiliFavoriteCache = it },
+                                clearBiliArchiveCache = clearBiliArchiveCache,
+                                onClearBiliArchiveCacheChange = { clearBiliArchiveCache = it },
+                                clearYoutubePlaylistCache = clearYoutubePlaylistCache,
+                                onClearYoutubePlaylistCacheChange = { clearYoutubePlaylistCache = it },
+                                clearLogFiles = clearLogFiles,
+                                onClearLogFilesChange = { clearLogFiles = it },
+                                clearCrashLogs = clearCrashLogs,
+                                onClearCrashLogsChange = { clearCrashLogs = it },
                                 downloadStagingClearEnabled = !hasActiveDownloadOperations,
                                 onClearCacheClick = onClearCacheClick,
                                 cardIndex = cardIndex,
@@ -1959,6 +2014,35 @@ fun SettingsScreen(
                                 onHighlightFinished = onSettingsHighlightFinished
                             )
                         }
+                    }
+                }
+
+                SettingsPage.StorageCacheDetails -> {
+                    item(key = "${selectedPage.name}:content") {
+                        StorageCacheDetailsContent(
+                            storageDetails = storageDetails,
+                            isScanning = storageDetailsLoading,
+                            onRefresh = ::refreshStorageDetails,
+                            onClearCache = {
+                                activeSettingsPage = SettingsPage.Storage
+                                showClearCacheDialog = true
+                            },
+                            onOpenSystemSettings = {
+                                runCatching {
+                                    val intent = Intent(
+                                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        "package:${context.packageName}".toUri()
+                                    )
+                                    context.startActivity(intent)
+                                }.onFailure {
+                                    showSettingsMessage(
+                                        composeResources.getString(
+                                            R.string.storage_open_system_settings_failed
+                                        )
+                                    )
+                                }
+                            }
+                        )
                     }
                 }
 
@@ -2108,17 +2192,25 @@ fun SettingsScreen(
                         )
                     }
                 }
-                    }
                 }
             }
         }
     }
-    }
+
+    SettingsPageHost(
+        activePage = activeSettingsPage,
+        splitLayout = isSettingsSplitLayout,
+        isolateAdvancedGlassTransitions = isolateAdvancedGlassTransitions,
+        content = settingsPageContent
+    )
 
     SettingsNeteaseAuthDialogs(
         showSheet = showNeteaseSheet,
         initialTab = neteaseSheetInitialTab,
-        onDismissSheet = { showNeteaseSheet = false },
+        onDismissSheet = {
+            showNeteaseSheet = false
+            AppContainer.neteaseCookieRepo.cancelAddAccount()
+        },
         inlineMsg = inlineMsg,
         onInlineMsgChange = { inlineMsg = it },
         showConfirmDialog = showConfirmDialog,
@@ -2139,10 +2231,39 @@ fun SettingsScreen(
         onBrowserLogin = null
     )
 
+    val neteaseAccounts by AppContainer.neteaseCookieRepo.accountsFlow.collectAsState()
+    if (showNeteaseAccountsDialog) {
+        SettingsMultiAccountDialog(
+            title = stringResource(R.string.settings_netease_accounts_title),
+            accounts = neteaseAccounts.accounts.map {
+                AccountManagementItem(
+                    id = it.id,
+                    name = it.name
+                )
+            },
+            primaryAccountId = neteaseAccounts.primaryAccountId,
+            playHistoryAccountId = neteaseAccounts.playHistoryAccountId,
+            streamingAccountId = neteaseAccounts.streamingAccountId,
+            onSelect = AppContainer.neteaseCookieRepo::selectAccount,
+            onRename = AppContainer.neteaseCookieRepo::renameAccount,
+            onDelete = AppContainer.neteaseCookieRepo::deleteAccount,
+            onAdd = {
+                AppContainer.neteaseCookieRepo.beginAddAccount()
+                showNeteaseAccountsDialog = false
+                neteaseSheetInitialTab = 0
+                showNeteaseSheet = true
+            },
+            onDismiss = { showNeteaseAccountsDialog = false }
+        )
+    }
+
     SettingsBiliAuthDialogs(
         showSheet = showBiliSheet,
         initialTab = biliSheetInitialTab,
-        onDismissSheet = { showBiliSheet = false },
+        onDismissSheet = {
+            showBiliSheet = false
+            AppContainer.biliCookieRepo.cancelAddAccount()
+        },
         inlineMsg = inlineMsg,
         onInlineMsgChange = { inlineMsg = it },
         vm = biliVm,
@@ -2159,6 +2280,33 @@ fun SettingsScreen(
         },
         onBrowserLogin = null
     )
+
+    val biliAccounts by AppContainer.biliCookieRepo.accountsFlow.collectAsState()
+    if (showBiliAccountsDialog) {
+        SettingsMultiAccountDialog(
+            title = stringResource(R.string.settings_bili_accounts_title),
+            accounts = biliAccounts.accounts.map {
+                AccountManagementItem(
+                    id = it.id,
+                    name = it.name,
+                    platformUserId = it.cookies["DedeUserID"]?.takeIf(String::isNotBlank)
+                )
+            },
+            primaryAccountId = biliAccounts.primaryAccountId,
+            playHistoryAccountId = biliAccounts.playHistoryAccountId,
+            streamingAccountId = biliAccounts.streamingAccountId,
+            onSelect = AppContainer.biliCookieRepo::selectAccount,
+            onRename = AppContainer.biliCookieRepo::renameAccount,
+            onDelete = AppContainer.biliCookieRepo::deleteAccount,
+            onAdd = {
+                AppContainer.biliCookieRepo.beginAddAccount()
+                showBiliAccountsDialog = false
+                biliSheetInitialTab = 0
+                showBiliSheet = true
+            },
+            onDismiss = { showBiliAccountsDialog = false }
+        )
+    }
 
     SettingsYouTubeAuthDialogs(
         showSheet = showYouTubeSheet,
@@ -2203,6 +2351,11 @@ fun SettingsScreen(
         uiDensityScale = uiDensityScale,
         onUiDensityScaleChange = onUiDensityScaleChange
     )
+    if (showLibraryPreferencesDialog) {
+        SettingsLibraryPreferencesDialog(
+            onDismissRequest = { showLibraryPreferencesDialog = false }
+        )
+    }
 
     if (showListenTogetherResetUuidDialog) {
         MiuixSettingsDialog(
@@ -2916,6 +3069,7 @@ private fun SettingsPersonalizationPageContent(
     scope: kotlinx.coroutines.CoroutineScope,
     defaultStartDestinationLabel: String,
     onOpenDefaultStartDestination: () -> Unit,
+    onOpenLibraryPreferences: () -> Unit,
     internationalEnabled: Boolean,
     homeTrendingLabelRes: Int,
     homeRadarLabelRes: Int,
@@ -2923,7 +3077,6 @@ private fun SettingsPersonalizationPageContent(
     homeTrendingSupportingRes: Int?,
     homeRadarSupportingRes: Int?,
     homeRecommendedSupportingRes: Int?,
-    neteaseHomeCardsEnabled: Boolean,
     homeStartAvailable: Boolean,
     showHomeContinueCard: Boolean,
     onShowHomeContinueCardChange: (Boolean) -> Unit,
@@ -2987,12 +3140,11 @@ private fun SettingsPersonalizationPageContent(
         val lyricTranslationUsePhonetic by autoSettingsRepository.lyricTranslationUsePhoneticFlow.collectAsState(
             initial = false
         )
+        val libraryDefaultTab by autoSettingsRepository.libraryDefaultTabFlow.collectAsState(
+            initial = "LOCAL"
+        )
 
-        if (shouldShowCard(0)) PersonalizationDetailCard(
-            highlighted = false,
-            highlightPulse = highlightPulse,
-            onHighlightFinished = onHighlightFinished
-        ) {
+        if (shouldShowCard(0)) PersonalizationDetailCard {
             MiuixSettingsSectionIntro(
                 title = stringResource(R.string.settings_personalization_start_section),
                 description = stringResource(R.string.settings_personalization_start_section_desc)
@@ -3021,6 +3173,27 @@ private fun SettingsPersonalizationPageContent(
                 onClick = onOpenDefaultStartDestination
             )
 
+            AutoSettingsListItem(
+                setting = AutoSettingsMetadata.requireSetting(AutoSettingsKeys.LIBRARY_DEFAULT_TAB),
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Outlined.LibraryMusic,
+                        contentDescription = stringResource(R.string.settings_library_home),
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                },
+                supportingContent = {
+                    val selectedTab = runCatching { LibraryTab.valueOf(libraryDefaultTab) }
+                        .getOrDefault(LibraryTab.LOCAL)
+                    Text(stringResource(R.string.settings_library_home_desc, stringResource(selectedTab.labelResId)))
+                },
+                highlightTargetId = highlightTargetId,
+                highlightPulse = highlightPulse,
+                onHighlightFinished = onHighlightFinished,
+                onClick = onOpenLibraryPreferences
+            )
+
             PersonalizationSwitchItem(
                 setting = AutoSettingsMetadata.requireSetting(AutoSettingsKeys.AUTO_SHOW_KEYBOARD),
                 checked = autoShowKeyboard,
@@ -3033,24 +3206,11 @@ private fun SettingsPersonalizationPageContent(
             )
         }
 
-        if (shouldShowCard(1)) PersonalizationDetailCard(
-            highlighted = false,
-            highlightPulse = highlightPulse,
-            onHighlightFinished = onHighlightFinished
-        ) {
+        if (shouldShowCard(1)) PersonalizationDetailCard {
             MiuixSettingsSectionIntro(
                 title = stringResource(R.string.settings_personalization_home_section),
                 description = stringResource(R.string.settings_personalization_home_section_desc)
             )
-            if (!neteaseHomeCardsEnabled && !internationalEnabled) {
-                Text(
-                    text = stringResource(R.string.settings_home_card_netease_login_required),
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-
             SettingsHomeCardSwitch(
                 title = stringResource(R.string.player_continue),
                 icon = Icons.Outlined.History,
@@ -3068,7 +3228,6 @@ private fun SettingsPersonalizationPageContent(
                 icon = Icons.Outlined.Bolt,
                 checked = showHomeTrendingCard,
                 onCheckedChange = onShowHomeTrendingCardChange,
-                enabled = neteaseHomeCardsEnabled,
                 targetId = "setting:home_card_trending",
                 highlightTargetId = highlightTargetId,
                 highlightPulse = highlightPulse,
@@ -3081,7 +3240,6 @@ private fun SettingsPersonalizationPageContent(
                 icon = if (internationalEnabled) Icons.Outlined.Explore else Icons.Outlined.Radar,
                 checked = showHomeRadarCard,
                 onCheckedChange = onShowHomeRadarCardChange,
-                enabled = neteaseHomeCardsEnabled,
                 targetId = "setting:home_card_radar",
                 highlightTargetId = highlightTargetId,
                 highlightPulse = highlightPulse,
@@ -3110,11 +3268,7 @@ private fun SettingsPersonalizationPageContent(
             }
         }
 
-        if (shouldShowCard(2)) PersonalizationDetailCard(
-            highlighted = false,
-            highlightPulse = highlightPulse,
-            onHighlightFinished = onHighlightFinished
-        ) {
+        if (shouldShowCard(2)) PersonalizationDetailCard {
             MiuixSettingsSectionIntro(
                 title = stringResource(R.string.settings_personalization_playback_info_section),
                 description = stringResource(R.string.settings_personalization_playback_info_section_desc)
@@ -3197,11 +3351,7 @@ private fun SettingsPersonalizationPageContent(
             )
         }
 
-        if (shouldShowCard(3)) PersonalizationDetailCard(
-            highlighted = false,
-            highlightPulse = highlightPulse,
-            onHighlightFinished = onHighlightFinished
-        ) {
+        if (shouldShowCard(3)) PersonalizationDetailCard {
             MiuixSettingsSectionIntro(
                 title = stringResource(R.string.settings_personalization_playback_controls_section),
                 description = stringResource(R.string.settings_personalization_playback_controls_section_desc)
@@ -3263,11 +3413,7 @@ private fun SettingsPersonalizationPageContent(
             )
         }
 
-        if (shouldShowCard(4)) PersonalizationDetailCard(
-            highlighted = false,
-            highlightPulse = highlightPulse,
-            onHighlightFinished = onHighlightFinished
-        ) {
+        if (shouldShowCard(4)) PersonalizationDetailCard {
             MiuixSettingsSectionIntro(
                 title = stringResource(R.string.settings_personalization_lyrics_scale_section),
                 description = stringResource(R.string.settings_personalization_lyrics_scale_section_desc)
@@ -3357,11 +3503,7 @@ private fun SettingsPersonalizationPageContent(
 
         }
 
-        if (shouldShowCard(5)) PersonalizationDetailCard(
-            highlighted = false,
-            highlightPulse = highlightPulse,
-            onHighlightFinished = onHighlightFinished
-        ) {
+        if (shouldShowCard(5)) PersonalizationDetailCard {
             MiuixSettingsSectionIntro(
                 title = stringResource(R.string.settings_personalization_background_section),
                 description = stringResource(R.string.settings_personalization_background_section_desc)
@@ -3436,15 +3578,9 @@ private fun SettingsPersonalizationPageContent(
 
 @Composable
 private fun PersonalizationDetailCard(
-    highlighted: Boolean,
-    highlightPulse: Int,
-    onHighlightFinished: (() -> Unit)?,
     content: @Composable () -> Unit
 ) {
     MiuixSettingsSectionCard(
-        highlighted = highlighted,
-        highlightPulse = highlightPulse,
-        onHighlightFinished = if (highlighted) onHighlightFinished else null,
         content = content
     )
 }
@@ -3463,7 +3599,9 @@ private fun PlaybackControlLayoutSettings(
     highlightPulse: Int,
     onHighlightFinished: (() -> Unit)?
 ) {
-    var selectedSetting by remember { mutableStateOf<PlaybackControlLayoutSetting?>(null) }
+    val selectedSetting = remember {
+        mutableStateOf<PlaybackControlLayoutSetting?>(null)
+    }
 
     PlaybackControlLayoutListItem(
         targetId = "setting:nowplaying_control_placement",
@@ -3471,7 +3609,9 @@ private fun PlaybackControlLayoutSettings(
         title = stringResource(R.string.settings_nowplaying_control_placement),
         description = stringResource(R.string.settings_nowplaying_control_placement_desc),
         value = nowPlayingControlPlacementLabel(preferences.nowPlayingPlacement),
-        onClick = { selectedSetting = PlaybackControlLayoutSetting.NOW_PLAYING_PLACEMENT },
+        onClick = {
+            selectedSetting.value = PlaybackControlLayoutSetting.NOW_PLAYING_PLACEMENT
+        },
         highlightTargetId = highlightTargetId,
         highlightPulse = highlightPulse,
         onHighlightFinished = onHighlightFinished
@@ -3482,7 +3622,9 @@ private fun PlaybackControlLayoutSettings(
         title = stringResource(R.string.settings_nowplaying_control_size),
         description = stringResource(R.string.settings_nowplaying_control_size_desc),
         value = playbackControlSizeLabel(preferences.nowPlayingSize),
-        onClick = { selectedSetting = PlaybackControlLayoutSetting.NOW_PLAYING_SIZE },
+        onClick = {
+            selectedSetting.value = PlaybackControlLayoutSetting.NOW_PLAYING_SIZE
+        },
         highlightTargetId = highlightTargetId,
         highlightPulse = highlightPulse,
         onHighlightFinished = onHighlightFinished
@@ -3493,13 +3635,15 @@ private fun PlaybackControlLayoutSettings(
         title = stringResource(R.string.settings_lyrics_control_size),
         description = stringResource(R.string.settings_lyrics_control_size_desc),
         value = playbackControlSizeLabel(preferences.lyricsSize),
-        onClick = { selectedSetting = PlaybackControlLayoutSetting.LYRICS_SIZE },
+        onClick = {
+            selectedSetting.value = PlaybackControlLayoutSetting.LYRICS_SIZE
+        },
         highlightTargetId = highlightTargetId,
         highlightPulse = highlightPulse,
         onHighlightFinished = onHighlightFinished
     )
 
-    val setting = selectedSetting ?: return
+    val setting = selectedSetting.value ?: return
     val title = when (setting) {
         PlaybackControlLayoutSetting.NOW_PLAYING_PLACEMENT ->
             stringResource(R.string.settings_nowplaying_control_placement)
@@ -3509,7 +3653,7 @@ private fun PlaybackControlLayoutSettings(
             stringResource(R.string.settings_lyrics_control_size)
     }
     MiuixSettingsDialog(
-        onDismissRequest = { selectedSetting = null },
+        onDismissRequest = { selectedSetting.value = null },
         title = { Text(title) },
         text = {
             Column {
@@ -3530,7 +3674,7 @@ private fun PlaybackControlLayoutSettings(
                                     onPreferencesChange(
                                         preferences.copy(nowPlayingPlacement = placement)
                                     )
-                                    selectedSetting = null
+                                    selectedSetting.value = null
                                 }
                             )
                         }
@@ -3544,7 +3688,6 @@ private fun PlaybackControlLayoutSettings(
                                     size == preferences.nowPlayingSize
                                 PlaybackControlLayoutSetting.LYRICS_SIZE ->
                                     size == preferences.lyricsSize
-                                PlaybackControlLayoutSetting.NOW_PLAYING_PLACEMENT -> false
                             }
                             MiuixSettingsChoiceRow(
                                 title = playbackControlSizeLabel(size),
@@ -3556,11 +3699,9 @@ private fun PlaybackControlLayoutSettings(
                                                 preferences.copy(nowPlayingSize = size)
                                             PlaybackControlLayoutSetting.LYRICS_SIZE ->
                                                 preferences.copy(lyricsSize = size)
-                                            PlaybackControlLayoutSetting.NOW_PLAYING_PLACEMENT ->
-                                                preferences
                                         }
                                     )
-                                    selectedSetting = null
+                                    selectedSetting.value = null
                                 }
                             )
                         }
@@ -3570,7 +3711,7 @@ private fun PlaybackControlLayoutSettings(
         },
         confirmButton = {
             MiuixSettingsTextButton(
-                onClick = { selectedSetting = null },
+                onClick = { selectedSetting.value = null },
                 text = { Text(stringResource(R.string.action_close)) }
             )
         }
@@ -3901,16 +4042,18 @@ private fun SettingsLoginExpandedContent(
     biliVm: BiliAuthViewModel,
     youtubeVm: YouTubeAuthViewModel,
     neteaseVm: NeteaseAuthViewModel,
+    onOpenBiliAccounts: () -> Unit,
+    onOpenNeteaseAccounts: () -> Unit,
     onOpenBiliSheet: (Int) -> Unit,
-    onOpenBiliSavedCookieDialog: () -> Unit,
     onOpenYouTubeSavedCookieDialog: () -> Unit,
-    onOpenNeteaseSavedCookieDialog: () -> Unit,
     onOpenYouTubeSheet: () -> Unit,
     onOpenNeteaseSheet: () -> Unit,
 ) {
     val biliAuthUiState by biliVm.uiState.collectAsStateWithLifecycleCompat()
     val youtubeAuthUiState by youtubeVm.uiState.collectAsStateWithLifecycleCompat()
     val neteaseAuthUiState by neteaseVm.uiState.collectAsStateWithLifecycleCompat()
+    val biliAccounts by AppContainer.biliCookieRepo.accountsFlow.collectAsState()
+    val neteaseAccounts by AppContainer.neteaseCookieRepo.accountsFlow.collectAsState()
 
     LaunchedEffect(biliVm, youtubeVm, neteaseVm) {
         biliVm.refreshAuthHealth()
@@ -3997,11 +4140,17 @@ private fun SettingsLoginExpandedContent(
                 )
             },
             headlineContent = { Text(stringResource(R.string.platform_bilibili)) },
-            supportingContent = { Text(biliStatusText) },
+            supportingContent = {
+                Text(
+                    if (biliAccounts.accounts.isNotEmpty()) {
+                        stringResource(R.string.settings_multi_account_count, biliAccounts.accounts.size)
+                    } else biliStatusText
+                )
+            },
             modifier = Modifier.settingsItemClickable(
                 onClick = {
-                    if (biliAuthUiState.hasSavedCookies) {
-                        onOpenBiliSavedCookieDialog()
+                    if (biliAccounts.accounts.isNotEmpty()) {
+                        onOpenBiliAccounts()
                     } else {
                         onOpenBiliSheet(0)
                     }
@@ -4043,11 +4192,17 @@ private fun SettingsLoginExpandedContent(
                 )
             },
             headlineContent = { Text(stringResource(R.string.platform_netease)) },
-            supportingContent = { Text(neteaseStatusText) },
+            supportingContent = {
+                Text(
+                    if (neteaseAccounts.accounts.isNotEmpty()) {
+                        stringResource(R.string.settings_multi_account_count, neteaseAccounts.accounts.size)
+                    } else neteaseStatusText
+                )
+            },
             modifier = Modifier.settingsItemClickable(
                 onClick = {
-                    if (neteaseAuthUiState.hasSavedCookies) {
-                        onOpenNeteaseSavedCookieDialog()
+                    if (neteaseAccounts.accounts.isNotEmpty()) {
+                        onOpenNeteaseAccounts()
                     } else {
                         onOpenNeteaseSheet()
                     }
