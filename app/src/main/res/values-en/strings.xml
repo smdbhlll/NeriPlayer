@@ -1052,6 +1052,13 @@
     <string name="settings_personalization_expand">Home, display, and personalization</string>
     <string name="settings_default_start_screen">Default Start Screen</string>
     <string name="settings_default_start_screen_desc">Current: %1$s</string>
+    <string name="settings_library_home">Library Home</string>
+    <string name="settings_library_home_desc">Default tab: %1$s</string>
+    <string name="settings_library_default_tab">Default library</string>
+    <string name="settings_library_default_tab_desc">Choose the first tab opened in Library</string>
+    <string name="settings_library_tab_order">Library tab order</string>
+    <string name="settings_library_tab_order_desc">Long-press and drag to reorder top-level tabs</string>
+    <string name="settings_library_drag_handle">Drag to reorder</string>
     <string name="settings_auto_show_keyboard">Auto-Open Keyboard</string>
     <string name="settings_auto_show_keyboard_desc">Auto focus inputs and try to show the keyboard</string>
     <string name="settings_always_use_new_tab_style">Always Use the New Tab Style</string>

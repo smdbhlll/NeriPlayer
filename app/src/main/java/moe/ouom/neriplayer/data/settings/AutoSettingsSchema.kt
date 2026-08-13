@@ -435,6 +435,30 @@ object AutoSettingsSchema {
         )
 
         @AutoSetting(
+            key = "library_default_tab",
+            type = SettingValueType.String,
+            defaultString = "LOCAL",
+            order = 15,
+            ui = SettingUiType.Custom
+        )
+        val libraryDefaultTab = autoSetting(
+            titleRes = R.string.settings_library_home,
+            descriptionRes = R.string.settings_library_home_desc
+        )
+
+        @AutoSetting(
+            key = "library_tab_order",
+            type = SettingValueType.String,
+            defaultString = "LOCAL,FAVORITE,NETEASE,YTMUSIC,BILI",
+            order = 16,
+            ui = SettingUiType.Custom
+        )
+        val libraryTabOrder = autoSetting(
+            titleRes = R.string.settings_library_tab_order,
+            descriptionRes = R.string.settings_library_tab_order_desc
+        )
+
+        @AutoSetting(
             key = "auto_show_keyboard",
             type = SettingValueType.Boolean,
             defaultBoolean = false,

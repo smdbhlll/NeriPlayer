@@ -1052,6 +1052,13 @@
     <string name="settings_personalization_expand">首页、显示与个性化偏好</string>
     <string name="settings_default_start_screen">默认打开页面</string>
     <string name="settings_default_start_screen_desc">当前：%1$s</string>
+    <string name="settings_library_home">媒体库首页</string>
+    <string name="settings_library_home_desc">默认打开：%1$s</string>
+    <string name="settings_library_default_tab">默认媒体库</string>
+    <string name="settings_library_default_tab_desc">选择进入媒体库时默认打开的一级页签</string>
+    <string name="settings_library_tab_order">媒体库页签排序</string>
+    <string name="settings_library_tab_order_desc">长按拖动调整一级页签顺序</string>
+    <string name="settings_library_drag_handle">拖动排序</string>
     <string name="settings_auto_show_keyboard">自动弹出软键盘</string>
     <string name="settings_auto_show_keyboard_desc">输入框出现时自动聚焦并尝试打开软键盘</string>
     <string name="settings_always_use_new_tab_style">始终使用新版 TAB 样式</string>

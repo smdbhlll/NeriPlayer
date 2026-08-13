@@ -192,6 +192,7 @@ import moe.ouom.neriplayer.ui.screen.tab.settings.component.UsbExclusiveSettings
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.YouTubePlaybackSourceSetting
 import moe.ouom.neriplayer.ui.screen.tab.settings.component.settingsItemClickable
 import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsGitHubDialogs
+import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsLibraryPreferencesDialog
 import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsPreferenceDialogs
 import moe.ouom.neriplayer.ui.screen.tab.settings.dialog.SettingsWebDavDialogs
 import moe.ouom.neriplayer.ui.screen.tab.settings.miuix.MiuixSettingsChoiceRow
@@ -218,6 +219,7 @@ import moe.ouom.neriplayer.ui.screen.tab.settings.page.miuixSettingsSectionCardI
 import moe.ouom.neriplayer.ui.screen.tab.settings.page.searchSettingsEntries
 import moe.ouom.neriplayer.ui.screen.tab.settings.page.settingsSearchScrollAnchor
 import moe.ouom.neriplayer.ui.screen.tab.settings.page.settingsHighlightTarget
+import moe.ouom.neriplayer.ui.screen.tab.LibraryTab
 import moe.ouom.neriplayer.ui.screen.tab.settings.state.collectAsStateWithLifecycleCompat
 import moe.ouom.neriplayer.ui.screen.tab.settings.state.formatSyncTime
 import moe.ouom.neriplayer.ui.feedback.AppFeedback
@@ -662,6 +664,7 @@ fun SettingsScreen(
     var showMobileDataYouTubeQualityDialog by remember { mutableStateOf(false) }
     var showMobileDataBiliQualityDialog by remember { mutableStateOf(false) }
     var showDefaultStartDestinationDialog by remember { mutableStateOf(false) }
+    var showLibraryPreferencesDialog by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var showNeteaseSavedCookieDialog by remember { mutableStateOf(false) }
     var showBiliSheet by remember { mutableStateOf(false) }
@@ -1539,6 +1542,7 @@ fun SettingsScreen(
                                 scope = scope,
                                 defaultStartDestinationLabel = defaultStartDestinationLabel,
                                 onOpenDefaultStartDestination = { showDefaultStartDestinationDialog = true },
+                                onOpenLibraryPreferences = { showLibraryPreferencesDialog = true },
                                 internationalEnabled = internationalEnabled,
                                 homeTrendingLabelRes = homeTrendingLabelRes,
                                 homeRadarLabelRes = homeRadarLabelRes,
@@ -2347,6 +2351,11 @@ fun SettingsScreen(
         uiDensityScale = uiDensityScale,
         onUiDensityScaleChange = onUiDensityScaleChange
     )
+    if (showLibraryPreferencesDialog) {
+        SettingsLibraryPreferencesDialog(
+            onDismissRequest = { showLibraryPreferencesDialog = false }
+        )
+    }
 
     if (showListenTogetherResetUuidDialog) {
         MiuixSettingsDialog(
@@ -3060,6 +3069,7 @@ private fun SettingsPersonalizationPageContent(
     scope: kotlinx.coroutines.CoroutineScope,
     defaultStartDestinationLabel: String,
     onOpenDefaultStartDestination: () -> Unit,
+    onOpenLibraryPreferences: () -> Unit,
     internationalEnabled: Boolean,
     homeTrendingLabelRes: Int,
     homeRadarLabelRes: Int,
@@ -3130,6 +3140,9 @@ private fun SettingsPersonalizationPageContent(
         val lyricTranslationUsePhonetic by autoSettingsRepository.lyricTranslationUsePhoneticFlow.collectAsState(
             initial = false
         )
+        val libraryDefaultTab by autoSettingsRepository.libraryDefaultTabFlow.collectAsState(
+            initial = "LOCAL"
+        )
 
         if (shouldShowCard(0)) PersonalizationDetailCard {
             MiuixSettingsSectionIntro(
@@ -3158,6 +3171,27 @@ private fun SettingsPersonalizationPageContent(
                 highlightPulse = highlightPulse,
                 onHighlightFinished = onHighlightFinished,
                 onClick = onOpenDefaultStartDestination
+            )
+
+            AutoSettingsListItem(
+                setting = AutoSettingsMetadata.requireSetting(AutoSettingsKeys.LIBRARY_DEFAULT_TAB),
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Outlined.LibraryMusic,
+                        contentDescription = stringResource(R.string.settings_library_home),
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                },
+                supportingContent = {
+                    val selectedTab = runCatching { LibraryTab.valueOf(libraryDefaultTab) }
+                        .getOrDefault(LibraryTab.LOCAL)
+                    Text(stringResource(R.string.settings_library_home_desc, stringResource(selectedTab.labelResId)))
+                },
+                highlightTargetId = highlightTargetId,
+                highlightPulse = highlightPulse,
+                onHighlightFinished = onHighlightFinished,
+                onClick = onOpenLibraryPreferences
             )
 
             PersonalizationSwitchItem(

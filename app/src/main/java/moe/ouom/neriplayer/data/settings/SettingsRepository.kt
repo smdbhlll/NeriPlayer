@@ -422,6 +422,12 @@ class SettingsRepository(private val context: Context) {
     val defaultStartDestinationFlow: Flow<String> =
         autoSettingsRepository.defaultStartDestinationFlow
 
+    val libraryDefaultTabFlow: Flow<String> =
+        autoSettingsRepository.libraryDefaultTabFlow
+
+    val libraryTabOrderFlow: Flow<String> =
+        autoSettingsRepository.libraryTabOrderFlow
+
     val autoShowKeyboardFlow: Flow<Boolean> =
         autoSettingsRepository.autoShowKeyboardFlow
 
@@ -1063,6 +1069,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setDefaultStartDestination(route: String) {
         autoSettingsRepository.setDefaultStartDestination(route)
+    }
+
+    suspend fun setLibraryDefaultTab(tab: String) {
+        autoSettingsRepository.setLibraryDefaultTab(tab)
+    }
+
+    suspend fun setLibraryTabOrder(order: String) {
+        autoSettingsRepository.setLibraryTabOrder(order)
     }
 
     suspend fun setAutoShowKeyboard(enabled: Boolean) {
